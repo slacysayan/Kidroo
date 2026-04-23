@@ -83,7 +83,18 @@ select = [
     "SIM",           # flake8-simplify
     "RUF",
 ]
-ignore = ["E501"]    # line-length handled by formatter
+ignore = [
+    "E501",          # line-length handled by formatter
+    "B008",          # FastAPI `Depends(...)` + `Query(...)` live in arg defaults by design
+]
+
+[tool.ruff.lint.per-file-ignores]
+# yt-dlp wrapper: Path/os.path calls are cheap metadata ops inside an
+# async generator that mainly awaits a subprocess — not blocking.
+"agents/download/skills/ytdlp.py" = ["ASYNC240"]
+# Tests intentionally use blind `pytest.raises(Exception)` for schema
+# validation and bind Pydantic classes to CamelCase locals.
+"tests/**" = ["B017", "N806"]
 
 [tool.mypy]
 python_version = "3.11"

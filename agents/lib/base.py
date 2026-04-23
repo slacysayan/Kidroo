@@ -22,8 +22,8 @@ from typing import Any, ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel
 
-from agents.lib.logging import JobLogger
 from agents.lib.llm import stream_complete as _stream_complete
+from agents.lib.logging import JobLogger
 
 InputT = TypeVar("InputT", bound=BaseModel)
 OutputT = TypeVar("OutputT", bound=BaseModel)

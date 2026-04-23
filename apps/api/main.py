@@ -14,18 +14,18 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from supabase import Client, create_client
 
 from agents.download.skills.ytdlp import scan as ytdlp_scan
 from agents.lib.config import get_settings
 from agents.lib.supabase import get_service_client
+from supabase import Client, create_client
 
 _log = structlog.get_logger(__name__)
 
@@ -292,7 +292,7 @@ async def start_job(
         "channel_id": meta["channel"]["id"],
         "channel_entity_id": meta["channel"]["composio_entity_id"],
         "schedule_per_day": req.per_day,
-        "schedule_start": req.start_date.astimezone(timezone.utc).isoformat(),
+        "schedule_start": req.start_date.astimezone(UTC).isoformat(),
         "videos": [
             {
                 "video_id": v["id"],

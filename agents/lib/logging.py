@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import contextvars
 import uuid
 from dataclasses import dataclass, field
@@ -24,9 +25,9 @@ from types import TracebackType
 from typing import Any, Literal, Self
 
 import structlog
-from supabase import Client, create_client
 
 from agents.lib.config import get_settings
+from supabase import Client, create_client
 
 Step = Literal["status", "tool_call", "reasoning", "fallback", "error"]
 Level = Literal["debug", "info", "warning", "error"]
@@ -94,10 +95,8 @@ class JobLogger:
         await self._queue.join()
         if self._flush_task:
             self._flush_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self._flush_task
-            except (asyncio.CancelledError, Exception):
-                pass
 
     # ─── public API ────────────────────────────────────────────────────────
 

@@ -12,16 +12,18 @@ from __future__ import annotations
 import structlog
 
 from workflows.hatchet import hatchet
-from workflows.video_pipeline import ProcessVideo, ProcessVideoBatch
+from workflows.video_pipeline import process_video, process_video_batch
 
 _log = structlog.get_logger(__name__)
 
 
 def main() -> None:
     _log.info("hatchet.worker.start")
-    worker = hatchet.worker("kidroo-worker", max_runs=16)
-    worker.register_workflow(ProcessVideo())
-    worker.register_workflow(ProcessVideoBatch())
+    worker = hatchet.worker(
+        "kidroo-worker",
+        slots=16,
+        workflows=[process_video, process_video_batch],
+    )
     worker.start()
 
 

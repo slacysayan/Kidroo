@@ -8,9 +8,9 @@
 """
 
 from agents.lib.config import Settings, get_settings
-from agents.lib.logging import JobLogger
 from agents.lib.llm import LLMUnavailableError, stream_complete
-from agents.lib.search import search_web, deep_scrape, semantic_search
+from agents.lib.logging import JobLogger
+from agents.lib.search import deep_scrape, search_web, semantic_search
 
 __all__ = [
     "BaseAgent",
@@ -25,4 +25,4 @@ __all__ = [
 ]
 
 # deferred import to break potential cycles
-from agents.lib.base import BaseAgent  # noqa: E402
+from agents.lib.base import BaseAgent

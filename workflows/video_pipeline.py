@@ -2,9 +2,9 @@
 
 Shape:
     ┌──────────────┐
-    │ orchestrate  │   (reads job row, resolves channel, computes schedule)
+    │  plan / fan  │   (reads job row, resolves channel, computes schedule)
     └──────┬───────┘
-           │  fan out (one Hatchet workflow run per video, concurrency ≤ 6/user)
+           │  fan out (one `process_video` run per video, concurrency ≤ 6/user)
            ▼
     ┌──────────────┐      ┌──────────────┐
     │ research     │ ───▶ │ metadata     │
@@ -14,20 +14,18 @@ Shape:
                           │ download     │ ───▶ │ upload       │
                           └──────────────┘      └──────────────┘
 
-Each step is a Hatchet `step` — retried independently with exponential
-backoff. LLMUnavailableError is caught and re-raised as NonRetryableError so
-Hatchet doesn't burn retries on an exhausted fallback chain.
+Uses the Hatchet v1 SDK: `hatchet.workflow(...).task(...)` with `parents=[...]`
+for DAG edges. LLMUnavailableError is re-raised as NonRetryableException so
+Hatchet stops burning retries on an exhausted fallback chain.
 """
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from hatchet_sdk import Context
-from hatchet_sdk.workflow import WorkflowMeta
-from pydantic import BaseModel
+from hatchet_sdk import Context, NonRetryableException
 
 from agents.download.agent import DownloadAgent, DownloadFileOutput, DownloadInput
 from agents.lib.config import get_settings
@@ -37,207 +35,152 @@ from agents.metadata.agent import MetadataAgent, MetadataInput
 from agents.research.agent import ResearchAgent, ResearchInput
 from agents.upload.agent import UploadAgent, UploadInput
 from workflows.hatchet import hatchet
-
-try:
-    from hatchet_sdk import NonRetryableError  # type: ignore[attr-defined]
-except Exception:  # pragma: no cover — older SDK versions
-    class NonRetryableError(RuntimeError):  # type: ignore[no-redef]
-        pass
-
-
-class ProcessVideoInput(BaseModel):
-    """Single-video workflow input."""
-
-    job_id: str
-    video_id: str                  # public.videos.id
-    source_url: str
-    source_video_id: str
-    video_title: str
-    video_description: str = ""
-    duration_secs: int = 0
-    channel_id: str                # public.channels.id
-    channel_entity_id: str
-    publish_at: datetime
-
-
-@hatchet.workflow(
-    name="process_video",
-    on_events=["job:video_ready"],
-    schedule_timeout="12h",
-    timeout="2h",
+from workflows.pipeline_models import (
+    ProcessVideoBatchInput,
+    ProcessVideoInput,
+    _finalize_video_payload,
+    _persist_metadata_payload,
+    _spread_schedule,
 )
-class ProcessVideo(metaclass=WorkflowMeta):  # type: ignore[misc]
-    """One source video → one upload. Runs many copies in parallel per job."""
 
-    @hatchet.step(timeout="10m", retries=2)  # type: ignore[misc]
-    async def research(self, ctx: Context) -> dict[str, Any]:
-        inp = ProcessVideoInput.model_validate(ctx.workflow_input())
-        try:
-            async with ResearchAgent(job_id=inp.job_id, video_id=inp.video_id) as agent:
-                out = await agent.run(
-                    ResearchInput(
-                        source_url=inp.source_url,
-                        video_title=inp.video_title,
-                        video_description=inp.video_description,
-                    )
-                )
-            return out.model_dump(mode="json")
-        except LLMUnavailableError as e:
-            raise NonRetryableError(str(e)) from e
+# ─── process_video: one video end-to-end ──────────────────────────────────
 
-    @hatchet.step(parents=["research"], timeout="5m", retries=2)  # type: ignore[misc]
-    async def metadata(self, ctx: Context) -> dict[str, Any]:
-        inp = ProcessVideoInput.model_validate(ctx.workflow_input())
-        research_out = ctx.step_output("research")
-        try:
-            async with MetadataAgent(job_id=inp.job_id, video_id=inp.video_id) as agent:
-                out = await agent.run(
-                    MetadataInput(
-                        research=research_out,  # type: ignore[arg-type]
-                        video_title=inp.video_title,
-                        duration_secs=inp.duration_secs,
-                        publish_at=inp.publish_at,
-                    )
-                )
-            _persist_metadata(inp.video_id, out.model_dump(mode="json"))
-            return out.model_dump(mode="json")
-        except LLMUnavailableError as e:
-            raise NonRetryableError(str(e)) from e
+process_video = hatchet.workflow(
+    name="process_video",
+    input_validator=ProcessVideoInput,
+)
 
-    @hatchet.step(parents=["metadata"], timeout="30m", retries=1)  # type: ignore[misc]
-    async def download(self, ctx: Context) -> dict[str, Any]:
-        inp = ProcessVideoInput.model_validate(ctx.workflow_input())
-        async with DownloadAgent(job_id=inp.job_id, video_id=inp.video_id) as agent:
-            out = await agent.run(DownloadInput(mode="download", url=inp.source_url))
-        assert isinstance(out, DownloadFileOutput)
-        return {"file_path": str(out.file_path), "bytes": out.bytes}
 
-    @hatchet.step(parents=["download"], timeout="30m", retries=1)  # type: ignore[misc]
-    async def upload(self, ctx: Context) -> dict[str, Any]:
-        inp = ProcessVideoInput.model_validate(ctx.workflow_input())
-        dl = ctx.step_output("download")
-        md = ctx.step_output("metadata")
-        async with UploadAgent(job_id=inp.job_id, video_id=inp.video_id) as agent:
+@process_video.task(
+    name="research",
+    execution_timeout=timedelta(minutes=10),
+    retries=2,
+)
+async def research_task(inp: ProcessVideoInput, ctx: Context) -> dict[str, Any]:
+    try:
+        async with ResearchAgent(job_id=inp.job_id, video_id=inp.video_id) as agent:
             out = await agent.run(
-                UploadInput(
-                    channel_id=inp.channel_id,
-                    channel_entity_id=inp.channel_entity_id,
-                    source_video_id=inp.source_video_id,
-                    file_path=Path(str(dl["file_path"])),
-                    title=str(md["title"]),
-                    description=str(md["description"]),
-                    tags=list(md.get("tags", [])),
-                    category_id=int(md["category_id"]),
+                ResearchInput(
+                    source_url=inp.source_url,
+                    video_title=inp.video_title,
+                    video_description=inp.video_description,
+                )
+            )
+        return out.model_dump(mode="json")
+    except LLMUnavailableError as e:
+        raise NonRetryableException(str(e)) from e
+
+
+@process_video.task(
+    name="metadata",
+    parents=[research_task],
+    execution_timeout=timedelta(minutes=5),
+    retries=2,
+)
+async def metadata_task(inp: ProcessVideoInput, ctx: Context) -> dict[str, Any]:
+    research_out = ctx.task_output(research_task)
+    try:
+        async with MetadataAgent(job_id=inp.job_id, video_id=inp.video_id) as agent:
+            out = await agent.run(
+                MetadataInput(
+                    research=research_out,  # type: ignore[arg-type]
+                    video_title=inp.video_title,
+                    duration_secs=inp.duration_secs,
                     publish_at=inp.publish_at,
                 )
             )
-        _finalize_video(inp.video_id, out.yt_video_id, inp.publish_at)
-        return out.model_dump(mode="json")
-
-
-class ProcessVideoBatchInput(BaseModel):
-    """Batch fanout — input shape that the API posts to Hatchet."""
-
-    job_id: str
-    channel_id: str
-    channel_entity_id: str
-    videos: list[dict[str, Any]]  # each validated as ProcessVideoInput sans publish_at
-    schedule_per_day: int = 1
-    schedule_start: datetime  # UTC midnight of start_date
-
-
-@hatchet.workflow(name="process_video_batch", timeout="24h")
-class ProcessVideoBatch(metaclass=WorkflowMeta):  # type: ignore[misc]
-    """Orchestrates the full job: spread videos over the schedule and fan out."""
-
-    @hatchet.step(timeout="5m")  # type: ignore[misc]
-    async def plan(self, ctx: Context) -> dict[str, Any]:
-        batch = ProcessVideoBatchInput.model_validate(ctx.workflow_input())
-        return _spread_schedule(batch).model_dump(mode="json")
-
-    @hatchet.step(parents=["plan"], timeout="24h")  # type: ignore[misc]
-    async def fanout(self, ctx: Context) -> dict[str, Any]:
-        plan = ctx.step_output("plan")
-        settings = get_settings()
-        semaphore = asyncio.Semaphore(settings.max_concurrent_videos_per_user)
-
-        async def _spawn(inp: ProcessVideoInput) -> dict[str, Any]:
-            async with semaphore:
-                ref = await hatchet.admin.aio.run_workflow(
-                    "process_video", inp.model_dump(mode="json")
-                )
-                return await ref.result()
-
-        inputs = [ProcessVideoInput.model_validate(v) for v in plan["items"]]
-        results = await asyncio.gather(
-            *(_spawn(i) for i in inputs), return_exceptions=True
+        payload = out.model_dump(mode="json")
+        await asyncio.to_thread(
+            lambda: get_service_client()
+            .table("videos")
+            .update(_persist_metadata_payload(payload))
+            .eq("id", inp.video_id)
+            .execute()
         )
-        return {
-            "total": len(inputs),
-            "failed": sum(1 for r in results if isinstance(r, Exception)),
-        }
+        return payload
+    except LLMUnavailableError as e:
+        raise NonRetryableException(str(e)) from e
 
 
-process_video_batch = ProcessVideoBatch  # public alias
+@process_video.task(
+    name="download",
+    parents=[metadata_task],
+    execution_timeout=timedelta(minutes=30),
+    retries=1,
+)
+async def download_task(inp: ProcessVideoInput, ctx: Context) -> dict[str, Any]:
+    async with DownloadAgent(job_id=inp.job_id, video_id=inp.video_id) as agent:
+        out = await agent.run(DownloadInput(mode="download", url=inp.source_url))
+    assert isinstance(out, DownloadFileOutput)
+    return {"file_path": str(out.file_path), "bytes": out.bytes}
 
 
-# ─── helpers ──────────────────────────────────────────────────────────────
-
-
-class _ScheduledPlan(BaseModel):
-    items: list[ProcessVideoInput]
-
-
-def _spread_schedule(batch: ProcessVideoBatchInput) -> _ScheduledPlan:
-    """Spread videos across days at the requested per-day cadence.
-
-    Videos within a day are separated by `24h / per_day` so they don't all
-    fire at midnight. All timestamps are UTC.
-    """
-    per_day = max(1, batch.schedule_per_day)
-    slot = timedelta(hours=24 / per_day)
-    items: list[ProcessVideoInput] = []
-    for idx, raw in enumerate(batch.videos):
-        day_offset = idx // per_day
-        slot_idx = idx % per_day
-        publish_at = (
-            batch.schedule_start
-            + timedelta(days=day_offset)
-            + slot * slot_idx
-        )
-        publish_at = publish_at.astimezone(timezone.utc)
-        items.append(
-            ProcessVideoInput(
-                job_id=batch.job_id,
-                channel_id=batch.channel_id,
-                channel_entity_id=batch.channel_entity_id,
-                publish_at=publish_at,
-                **raw,
+@process_video.task(
+    name="upload",
+    parents=[download_task],
+    execution_timeout=timedelta(minutes=30),
+    retries=1,
+)
+async def upload_task(inp: ProcessVideoInput, ctx: Context) -> dict[str, Any]:
+    dl = ctx.task_output(download_task)
+    md = ctx.task_output(metadata_task)
+    async with UploadAgent(job_id=inp.job_id, video_id=inp.video_id) as agent:
+        out = await agent.run(
+            UploadInput(
+                channel_id=inp.channel_id,
+                channel_entity_id=inp.channel_entity_id,
+                source_video_id=inp.source_video_id,
+                file_path=Path(str(dl["file_path"])),
+                title=str(md["title"]),
+                description=str(md["description"]),
+                tags=list(md.get("tags", [])),
+                category_id=int(md["category_id"]),
+                publish_at=inp.publish_at,
             )
         )
-    return _ScheduledPlan(items=items)
+    await asyncio.to_thread(
+        lambda: get_service_client()
+        .table("videos")
+        .update(_finalize_video_payload(out.yt_video_id, inp.publish_at))
+        .eq("id", inp.video_id)
+        .execute()
+    )
+    return out.model_dump(mode="json")
 
 
-def _persist_metadata(video_id: str, meta: dict[str, Any]) -> None:
-    supa = get_service_client()
-    supa.table("videos").update(
-        {
-            "title": meta.get("title"),
-            "description": meta.get("description"),
-            "tags": meta.get("tags"),
-            "hashtags": meta.get("hashtags"),
-            "category_id": meta.get("category_id"),
-            "status": "uploading",
-        }
-    ).eq("id", video_id).execute()
+# ─── process_video_batch: fan-out across the selected videos ──────────────
+
+process_video_batch = hatchet.workflow(
+    name="process_video_batch",
+    input_validator=ProcessVideoBatchInput,
+)
 
 
-def _finalize_video(video_id: str, yt_video_id: str, publish_at: datetime) -> None:
-    supa = get_service_client()
-    supa.table("videos").update(
-        {
-            "yt_video_id": yt_video_id,
-            "publish_at": publish_at.isoformat(),
-            "status": "scheduled",
-        }
-    ).eq("id", video_id).execute()
+@process_video_batch.task(
+    name="plan",
+    execution_timeout=timedelta(minutes=1),
+)
+async def plan_task(inp: ProcessVideoBatchInput, ctx: Context) -> dict[str, Any]:
+    return _spread_schedule(inp).model_dump(mode="json")
+
+
+@process_video_batch.task(
+    name="fanout",
+    parents=[plan_task],
+    execution_timeout=timedelta(hours=24),
+)
+async def fanout_task(inp: ProcessVideoBatchInput, ctx: Context) -> dict[str, Any]:
+    plan = ctx.task_output(plan_task)
+    settings = get_settings()
+    sem = asyncio.Semaphore(settings.max_concurrent_videos_per_user)
+
+    async def _spawn(video_input: ProcessVideoInput) -> Any:
+        async with sem:
+            return await process_video.aio_run(video_input)
+
+    inputs = [ProcessVideoInput.model_validate(v) for v in plan["items"]]
+    results = await asyncio.gather(
+        *(_spawn(v) for v in inputs), return_exceptions=True
+    )
+    failed = sum(1 for r in results if isinstance(r, Exception))
+    return {"total": len(inputs), "failed": failed}

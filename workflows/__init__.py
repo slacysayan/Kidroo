@@ -1,10 +1,11 @@
 """Hatchet workflow definitions.
 
-The Hatchet worker process imports this package and registers every workflow
-declared inside it. See `workflows.video_pipeline` for the main pipeline.
+Pure-Python helpers (models + scheduling) live in `workflows.pipeline_models`
+and do not depend on the Hatchet SDK — they're unit-testable on their own.
+
+The Hatchet-registered workflows live in `workflows.video_pipeline` and are
+wired by `workflows.worker` at runtime.
 """
 from __future__ import annotations
 
-from workflows.video_pipeline import process_video_batch
-
-__all__ = ["process_video_batch"]
+__all__ = ["hatchet"]

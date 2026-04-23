@@ -38,8 +38,14 @@ jobs:
         run: pip install uv
       - name: Install deps
         run: |
-          uv pip install --system -e ".[dev]" || uv pip install --system -e .
-          uv pip install --system pytest pytest-asyncio ruff
+          uv pip install --system \
+            ruff pytest pytest-asyncio \
+            "pydantic>=2.9" "pydantic-settings>=2.6" \
+            structlog httpx \
+            "groq>=0.11" "cerebras-cloud-sdk>=1.20" \
+            "tavily-python>=0.5" "firecrawl-py>=1.6" "exa-py>=1.3" \
+            "supabase>=2.10" \
+            "hatchet-sdk>=1.0"
       - name: ruff
         run: ruff check agents workflows apps/api tests
       - name: pytest
@@ -54,17 +60,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: pnpm
-          cache-dependency-path: apps/web/pnpm-lock.yaml
       - name: Install
         run: pnpm install --no-frozen-lockfile
       - name: Biome lint
-        run: pnpm lint --reporter=summary || echo "biome lint completed"
+        run: pnpm exec biome lint . || echo "biome lint completed"
       - name: TypeScript
         run: pnpm typecheck
         env:
