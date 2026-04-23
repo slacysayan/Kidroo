@@ -17,6 +17,8 @@ from pydantic import BaseModel
 
 
 class VideoMeta(BaseModel):
+    """Flat metadata for a single source video, produced by :func:`scan`."""
+
     source_video_id: str
     title: str
     duration_secs: int | None = None
@@ -28,12 +30,14 @@ class VideoMeta(BaseModel):
 
 @dataclass(slots=True)
 class DownloadResult:
+    """Final result of a successful download — on-disk path and size."""
+
     file_path: Path
     bytes: int
 
 
 class YtdlpError(RuntimeError):
-    pass
+    """Raised when yt-dlp exits non-zero or produces no usable output."""
 
 
 async def scan(url: str) -> list[VideoMeta]:

@@ -13,6 +13,7 @@ from supabase import Client, create_client
 
 @lru_cache(maxsize=1)
 def get_service_client() -> Client:
+    """Return a cached service-role Supabase client (RLS bypassed)."""
     settings = get_settings()
     return create_client(
         settings.supabase_url,

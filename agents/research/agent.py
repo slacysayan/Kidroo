@@ -17,12 +17,16 @@ from agents.research.prompts import SYSTEM_PROMPT
 
 
 class ResearchInput(BaseModel):
+    """Input contract for :class:`ResearchAgent`."""
+
     source_url: str
     video_title: str
     video_description: str = ""
 
 
 class ResearchOutput(BaseModel):
+    """Structured research brief consumed by :class:`MetadataAgent`."""
+
     niche: str
     keywords: list[str] = Field(min_length=1)
     trending_angles: list[str] = Field(min_length=1)
@@ -30,6 +34,8 @@ class ResearchOutput(BaseModel):
 
 
 class ResearchAgent(BaseAgent[ResearchInput, ResearchOutput]):
+    """Runs Tavily → Firecrawl → Exa and synthesises a Groq-streamed JSON brief."""
+
     name = "research"
 
     async def run(self, inp: ResearchInput) -> ResearchOutput:

@@ -12,7 +12,7 @@ responsibility is turning the user's words into a deterministic plan.
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -22,23 +22,31 @@ from agents.orchestrator.prompts import SYSTEM_PROMPT
 
 
 class ChannelRef(BaseModel):
+    """One connected YouTube channel available to the user."""
+
     composio_entity_id: str
     name: str
 
 
 class SourceVideo(BaseModel):
+    """A source video detected by the upstream scan step."""
+
     source_video_id: str
     title: str
     duration_secs: int | None = None
 
 
 class OrchestratorInput(BaseModel):
+    """Input contract for :class:`OrchestratorAgent`."""
+
     user_message: str
     available_channels: list[ChannelRef]
     detected_videos: list[SourceVideo]
 
 
 class Schedule(BaseModel):
+    """Publish cadence requested by the user."""
+
     per_day: int = Field(ge=1, le=6)
     start_date: date
     timezone: str = "UTC"
@@ -46,6 +54,8 @@ class Schedule(BaseModel):
 
 
 class TaskPlan(BaseModel):
+    """Final plan handed to the Hatchet batch workflow."""
+
     channel_entity_id: str
     schedule: Schedule
     video_ids: list[str]
@@ -59,6 +69,8 @@ class TaskPlan(BaseModel):
 
 
 class OrchestratorAgent(BaseAgent[OrchestratorInput, TaskPlan]):
+    """Parses a free-text user message into a structured :class:`TaskPlan`."""
+
     name = "orchestrator"
 
     async def run(self, inp: OrchestratorInput) -> TaskPlan:
@@ -91,6 +103,45 @@ class OrchestratorAgent(BaseAgent[OrchestratorInput, TaskPlan]):
             raise ValueError(f"orchestrator produced invalid JSON: {e}") from e
 
         plan = TaskPlan.model_validate(raw)
+
+        # Post-parse validation — the LLM is free to hallucinate IDs or pick a
+        # past start_date, so re-verify every field against the input context
+        # before returning the plan.
+        today_utc = datetime.now(UTC).date()
+        if plan.schedule.start_date < today_utc:
+            await self.log.error(
+                "orchestrator produced a past start_date",
+                start_date=plan.schedule.start_date.isoformat(),
+                today_utc=today_utc.isoformat(),
+            )
+            raise ValueError(
+                f"schedule.start_date {plan.schedule.start_date.isoformat()} "
+                f"is in the past (today UTC: {today_utc.isoformat()})"
+            )
+
+        channel_ids = {c.composio_entity_id for c in inp.available_channels}
+        if plan.channel_entity_id not in channel_ids:
+            await self.log.error(
+                "orchestrator picked an unknown channel",
+                channel_entity_id=plan.channel_entity_id,
+                available=sorted(channel_ids),
+            )
+            raise ValueError(
+                f"channel_entity_id {plan.channel_entity_id!r} is not in "
+                f"available_channels"
+            )
+
+        detected_ids = {v.source_video_id for v in inp.detected_videos}
+        unknown = [vid for vid in plan.video_ids if vid not in detected_ids]
+        if unknown:
+            await self.log.error(
+                "orchestrator selected videos that were not detected",
+                unknown=unknown,
+            )
+            raise ValueError(
+                f"video_ids contains ids not present in detected_videos: {unknown}"
+            )
+
         await self.log.status(
             "task plan ready",
             channel=plan.channel_entity_id,

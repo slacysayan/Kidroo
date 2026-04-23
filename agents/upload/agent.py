@@ -19,6 +19,8 @@ from agents.upload.skills import composio_youtube
 
 
 class UploadInput(BaseModel):
+    """Everything :class:`UploadAgent` needs to schedule one YouTube upload."""
+
     channel_id: str            # public.channels.id (uuid)
     channel_entity_id: str     # composio entity
     source_video_id: str
@@ -31,12 +33,16 @@ class UploadInput(BaseModel):
 
 
 class UploadOutput(BaseModel):
+    """Result of a successful upload — YT id, ghost-verify flag, idempotency key."""
+
     yt_video_id: str
     ghost_verified: bool
     idempotency_key: str
 
 
 class UploadAgent(BaseAgent[UploadInput, UploadOutput]):
+    """Calls Composio `YOUTUBE_UPLOAD_VIDEO` with publishAt + idempotency guard."""
+
     name = "upload"
 
     async def run(self, inp: UploadInput) -> UploadOutput:

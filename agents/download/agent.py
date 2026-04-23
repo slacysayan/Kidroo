@@ -1,6 +1,7 @@
 """Download agent — yt-dlp wrapper for scan + download modes."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -10,18 +11,32 @@ from agents.download.skills import ytdlp
 from agents.lib.base import BaseAgent
 from agents.lib.config import get_settings
 
+_SAFE_SEGMENT = re.compile(r"[^A-Za-z0-9_\-]")
+
+
+def _safe_segment(value: str) -> str:
+    """Normalise an identifier to a filesystem-safe path segment."""
+    cleaned = _SAFE_SEGMENT.sub("-", value).strip("-")
+    return cleaned or "unknown"
+
 
 class DownloadInput(BaseModel):
+    """Input contract for :class:`DownloadAgent` (scan metadata or fetch file)."""
+
     mode: Literal["scan", "download"]
     url: str
 
 
 class ScanOutput(BaseModel):
+    """Result of a scan-mode run — detected videos with flat metadata only."""
+
     mode: Literal["scan"] = "scan"
     videos: list[ytdlp.VideoMeta]
 
 
 class DownloadFileOutput(BaseModel):
+    """Result of a download-mode run — final on-disk file path + size."""
+
     mode: Literal["download"] = "download"
     file_path: Path
     bytes: int
@@ -31,6 +46,8 @@ DownloadOutput = ScanOutput | DownloadFileOutput
 
 
 class DownloadAgent(BaseAgent[DownloadInput, DownloadOutput]):
+    """Shells out to yt-dlp in either scan or download mode."""
+
     name = "download"
 
     async def run(self, inp: DownloadInput) -> DownloadOutput:
@@ -40,8 +57,13 @@ class DownloadAgent(BaseAgent[DownloadInput, DownloadOutput]):
             await self.log.status("scan complete", n_videos=len(videos))
             return ScanOutput(videos=videos)
 
-        # download mode
-        staging = get_settings().download_staging_dir
+        # download mode — isolate every (job, video) into its own staging
+        # subdirectory so concurrent downloads never see each other's temp
+        # or final files.
+        root = get_settings().download_staging_dir
+        video_segment = _safe_segment(self.video_id or "no-video")
+        staging = root / _safe_segment(self.job_id) / video_segment
+        staging.mkdir(parents=True, exist_ok=True)
         await self.log.tool_call("yt-dlp.download", url=inp.url, staging=str(staging))
 
         final_path: Path | None = None

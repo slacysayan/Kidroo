@@ -26,6 +26,8 @@ from agents.lib.config import get_settings
 
 
 class UploadRequest(BaseModel):
+    """Parameters for a single Composio `YOUTUBE_UPLOAD_VIDEO` call."""
+
     entity_id: str                 # composio entity, i.e. the YouTube channel alias
     file_path: Path
     title: str
@@ -37,6 +39,8 @@ class UploadRequest(BaseModel):
 
 
 class UploadResult(BaseModel):
+    """Return value of :func:`upload` — includes ghost-verify status and raw response."""
+
     yt_video_id: str
     ghost_verified: bool
     raw: dict[str, Any]

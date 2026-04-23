@@ -12,6 +12,8 @@ from agents.research.agent import ResearchOutput
 
 
 class MetadataInput(BaseModel):
+    """Input contract for :class:`MetadataAgent`."""
+
     research: ResearchOutput
     video_title: str
     duration_secs: int
@@ -19,6 +21,8 @@ class MetadataInput(BaseModel):
 
 
 class MetadataOutput(BaseModel):
+    """Upload-ready YouTube metadata produced by :class:`MetadataAgent`."""
+
     title: str = Field(max_length=60)
     description: str
     tags: list[str] = Field(min_length=1, max_length=30)
@@ -38,6 +42,8 @@ class MetadataOutput(BaseModel):
 
 
 class MetadataAgent(BaseAgent[MetadataInput, MetadataOutput]):
+    """Streams Groq output to build title/description/tags/etc. for one video."""
+
     name = "metadata"
 
     async def run(self, inp: MetadataInput) -> MetadataOutput:

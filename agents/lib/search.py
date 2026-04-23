@@ -26,6 +26,8 @@ _log = structlog.get_logger(__name__)
 
 @dataclass(slots=True)
 class SearchResult:
+    """A single web-search hit returned by :func:`search_web` / :func:`semantic_search`."""
+
     title: str
     url: str
     snippet: str
@@ -35,6 +37,8 @@ class SearchResult:
 
 @dataclass(slots=True)
 class ScrapeResult:
+    """Result of scraping one URL into clean markdown via :func:`deep_scrape`."""
+
     url: str
     markdown: str
     title: str | None
@@ -111,7 +115,26 @@ async def search_web(
             if idx > 0:
                 _log.info("tavily.fallback_key_used", query=query)
             return results
-        except (httpx.HTTPStatusError, httpx.ConnectError, httpx.ReadTimeout) as e:
+        except httpx.HTTPStatusError as e:
+            # Only rotate keys for quota / server-side transient failures.
+            # Auth / validation errors (4xx except 429) are caller bugs — let
+            # them surface immediately instead of burning fallback quota.
+            if not _is_retryable_status(e.response.status_code):
+                _log.warning(
+                    "tavily.non_retryable_http_error",
+                    key_index=idx,
+                    status=e.response.status_code,
+                )
+                raise
+            last_err = e
+            _log.warning(
+                "tavily.search_failed",
+                key_index=idx,
+                status=e.response.status_code,
+                will_failover=idx + 1 < len(keys),
+            )
+            continue
+        except (httpx.ConnectError, httpx.ReadTimeout) as e:
             last_err = e
             _log.warning(
                 "tavily.search_failed",
@@ -120,12 +143,13 @@ async def search_web(
                 will_failover=idx + 1 < len(keys),
             )
             continue
-        except Exception as e:  # pragma: no cover — SDK-specific
-            last_err = e
-            _log.warning("tavily.unexpected_error", key_index=idx, error=str(e))
-            continue
 
     raise RuntimeError(f"Tavily exhausted (all keys failed): {last_err!r}")
+
+
+def _is_retryable_status(status: int) -> bool:
+    """True for transient HTTP statuses worth rotating keys on."""
+    return status == 429 or status >= 500
 
 
 # ─── Firecrawl ───────────────────────────────────────────────────────────
