@@ -67,6 +67,22 @@ class Settings(BaseSettings):
     download_staging_dir: Path = Path("/tmp/kidroo")
     log_level: str = "info"
 
+    # Comma-separated list of origins allowed to make credentialed
+    # cross-origin requests to the API. Leave unset during local dev to get
+    # the ``http://localhost:3000`` default; in production set this to the
+    # Vercel deploy URL (and any custom domain).
+    cors_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Parse ``cors_origins`` into a deduped list of non-empty origins."""
+        seen: list[str] = []
+        for raw in self.cors_origins.split(","):
+            origin = raw.strip()
+            if origin and origin not in seen:
+                seen.append(origin)
+        return seen
+
     @property
     def supabase_client_key(self) -> SecretStr:
         """Prefer the new publishable key; fall back to the legacy anon JWT."""

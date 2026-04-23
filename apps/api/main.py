@@ -49,12 +49,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Pin CORS to the configured frontend origins. Wildcarding `allow_origins`
+# together with `allow_credentials=True` would let any site make credentialed
+# cross-origin requests (including Supabase cookie-based sessions) against
+# this API, enabling CSRF from arbitrary origins. Set `CORS_ORIGINS` in the
+# deployed environment to a comma-separated list of the Vercel / custom domain.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_settings().cors_origin_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["authorization", "content-type"],
 )
 
 
