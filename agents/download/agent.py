@@ -41,7 +41,7 @@ class DownloadAgent(BaseAgent[DownloadInput, DownloadOutput]):
             return ScanOutput(videos=videos)
 
         # download mode
-        staging = get_settings().download_staging_dir
+        staging = get_settings().download_staging_dir / f"{self.job_id}_{self.video_id}"
         await self.log.tool_call("yt-dlp.download", url=inp.url, staging=str(staging))
 
         final_path: Path | None = None
