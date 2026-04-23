@@ -123,25 +123,19 @@ async def _idempotent_lookup(idempotency_key: str) -> str | None:
 
 
 async def _decrement_quota(channel_id: str) -> None:
+    """Atomically bump `channel_quota.uploads_today` for a channel.
+
+    Uses the `increment_uploads_today` Postgres RPC (migration 003) which
+    does an `INSERT ... ON CONFLICT DO UPDATE SET uploads_today = … + 1`.
+    A read-modify-write here would race: fanout allows up to 6 concurrent
+    uploads per user, and two workers reading the same value and writing
+    `current + 1` back would drop one of the increments.
+    """
+
     def _q() -> None:
         supa = get_service_client()
-        # Use an RPC or raw SQL for the atomic increment; here we do a
-        # read-modify-write that's safe enough for free-tier volumes (<=6/day).
-        row = (
-            supa.table("channel_quota")
-            .select("uploads_today, daily_limit")
-            .eq("channel_id", channel_id)
-            .limit(1)
-            .execute()
-        )
-        if not row.data:
-            supa.table("channel_quota").insert(
-                {"channel_id": channel_id, "uploads_today": 1}
-            ).execute()
-            return
-        current = row.data[0].get("uploads_today", 0) or 0
-        supa.table("channel_quota").update(
-            {"uploads_today": current + 1}
-        ).eq("channel_id", channel_id).execute()
+        supa.rpc(
+            "increment_uploads_today", {"p_channel_id": channel_id}
+        ).execute()
 
     await asyncio.to_thread(_q)

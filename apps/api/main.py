@@ -325,9 +325,13 @@ async def start_job(
     try:
         run_id = await asyncio.to_thread(_enqueue)
     except Exception as e:
+        # Keep the raw error in structured logs only; surfacing `str(e)` to
+        # the client can leak internal hostnames, auth tokens, or stack
+        # fragments from the Hatchet SDK.
         _log.error("hatchet.enqueue_failed", error=str(e))
         raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY, f"hatchet enqueue failed: {e}"
+            status.HTTP_502_BAD_GATEWAY,
+            "workflow enqueue failed — check server logs",
         ) from e
 
     def _mark() -> None:
