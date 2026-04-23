@@ -123,6 +123,22 @@ create table if not exists public.channel_quota (
     updated_at       timestamptz not null default now()
 );
 
+-- ─── quota reset logic ──────────────────────────────────────────────────
+
+create or replace function public.reset_channel_quotas() returns trigger as $$
+begin
+    if new.reset_at <= now() then
+        new.uploads_today = 0;
+        new.reset_at = date_trunc('day', now()) + interval '1 day';
+    end if;
+    return new;
+end;
+$$ language plpgsql;
+
+create trigger reset_channel_quotas_trigger
+    before update on public.channel_quota
+    for each row execute function public.reset_channel_quotas();
+
 -- ─── failed_jobs (Phase 5 dead-letter view) ──────────────────────────────
 
 create or replace view public.failed_jobs as
