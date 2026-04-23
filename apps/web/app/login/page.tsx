@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { toast } from "sonner";
 import { sanitizeNext } from "@/lib/auth/sanitize-next";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -36,7 +37,7 @@ export default function LoginPage() {
       if (mode === "password") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.replace(next);
+        router.replace(next as Route);
       } else if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email,

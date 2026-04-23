@@ -2,14 +2,14 @@
 
 > Agentic YouTube content pipeline — paste a link, agents handle the rest.
 
-**🚦 Status: `Phase 0` ✅ · `Phase 1` ✅ · `Phase 2` ✅ · `Phase 3 — Durable orchestration` ← next**
+**🚦 Status: `Phase 0` ✅ · `Phase 1` ✅ · `Phase 2` ✅ · `Phase 3 — Durable orchestration & local-dev wiring` 🟡 in progress**
 
 | Phase | Scope | State |
 |---|---|---|
 | **0 Foundation** | Docs, scaffolding, schema, `.env` surface, skill harness | ✅ merged |
 | **1 Infra & runtime libs** | Typed settings, Groq↔Cerebras streaming LLM wrapper, Tavily→Firecrawl→Exa search, Supabase auth (full), Next.js 15 shell with Geist fonts, FastAPI skeleton | ✅ merged |
 | **2 Agent core** | 5 CrewAI-style agents (orchestrator, research, metadata, download, upload), per-job download staging, JobLogger with retry + backoff | ✅ merged |
-| **3 Durable orchestration** | Hatchet v1 workflow end-to-end, retries, concurrency caps, dead-letter, resumability proof | 🟡 next |
+| **3 Durable orchestration** | Hatchet v1 workflow end-to-end, retries, concurrency caps, dead-letter, resumability proof, local-dev one-command boot, Vercel + Railway config | 🟡 in progress |
 | **4 Frontend chat UI** | Realtime agent-log rail, video-selection card, schedule picker, GSAP choreography | ⚪ queued |
 | **5 Hardening** | Quota trackers, kill-switch, idempotency keys, nightly smoke | ⚪ queued |
 | **6 Launch readiness** | Runbook, onboarding, observability | ⚪ queued |
@@ -22,7 +22,8 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full exit criteria per phase.
 - **Golden path.** User pastes a YouTube URL → `POST /jobs` → `POST /jobs/{id}/scan` (yt-dlp) → `POST /jobs/{id}/start` → Hatchet fans out per video → agents stream tokens into `agent_logs` → frontend subscribes via Supabase Realtime.
 - **Entry points for agents.** Start at [`AGENTS.md`](AGENTS.md) (root spec). Runtime-agent contracts are in [`docs/AGENTS.md`](docs/AGENTS.md). The dev-harness skills under [`.agents/skills/`](.agents/skills) describe every workflow you'll need to touch.
 - **Where the work happens.** All feature work goes through PRs onto `main`. `production` is a fast-forward-only mirror of `main`, protected, and is the deploy target. See [`docs/BRANCHING.md`](docs/BRANCHING.md).
-- **Hosting is pluggable.** The API and worker ship as plain Dockerfile-less processes driven by [`Procfile`](Procfile) + env vars. [`railway.json`](railway.json) is the first-class config; pointing at Fly.io, Render, or any other PaaS requires no code changes — swap the config + env and redeploy.
+- **Hosting is pluggable.** The API and worker ship as plain Dockerfile-less processes driven by [`Procfile`](Procfile) + env vars. [`railway.json`](railway.json) is the first-class config; pointing at Fly.io, Render, or any other PaaS requires no code changes — swap the config + env and redeploy. Browser frontend deploys on Vercel via [`apps/web/vercel.json`](apps/web/vercel.json).
+- **Run locally.** One command: `./scripts/dev.sh` brings up the API (`:8000`), Hatchet worker, and Next.js dev server (`:3000`) together. See [`docs/LOCAL_DEV.md`](docs/LOCAL_DEV.md).
 
 Kidroo is a chat-first, agent-native web app that turns a pasted YouTube URL (channel, playlist, or single video) into a fully scheduled upload on one or more of your owned YouTube channels. Five specialized AI agents collaborate in real time — scanning the source, researching context, generating SEO metadata, downloading the asset, and uploading via Composio's OAuth bridge — with every reasoning step, tool call, and status change streaming live into the UI.
 
