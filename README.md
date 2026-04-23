@@ -1,10 +1,28 @@
 # Kidroo
 
-> Agentic YouTube content pipeline — paste a link, agents handle the rest.ok
+> Agentic YouTube content pipeline — paste a link, agents handle the rest.
 
-**🚦 Current phase: `Phase 0 — Foundation` ✅ complete · `Phase 1 — Infra` ← ready to start**
+**🚦 Status: `Phase 0` ✅ · `Phase 1` ✅ · `Phase 2` ✅ · `Phase 3 — Durable orchestration` ← next**
 
-This PR delivers everything Phase 0 calls for: reconciled PRD, architecture, runtime-agent specs, exact integration call signatures, UI spec, phased roadmap, `.env` surface, Supabase schema, in-repo dev-agent skill harness, and an external-skills manifest (`.skills/manifest.json`) installed via `npx skills add`. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full phase list and exit criteria.
+| Phase | Scope | State |
+|---|---|---|
+| **0 Foundation** | Docs, scaffolding, schema, `.env` surface, skill harness | ✅ merged |
+| **1 Infra & runtime libs** | Typed settings, Groq↔Cerebras streaming LLM wrapper, Tavily→Firecrawl→Exa search, Supabase auth (full), Next.js 15 shell with Geist fonts, FastAPI skeleton | ✅ merged |
+| **2 Agent core** | 5 CrewAI-style agents (orchestrator, research, metadata, download, upload), per-job download staging, JobLogger with retry + backoff | ✅ merged |
+| **3 Durable orchestration** | Hatchet v1 workflow end-to-end, retries, concurrency caps, dead-letter, resumability proof | 🟡 next |
+| **4 Frontend chat UI** | Realtime agent-log rail, video-selection card, schedule picker, GSAP choreography | ⚪ queued |
+| **5 Hardening** | Quota trackers, kill-switch, idempotency keys, nightly smoke | ⚪ queued |
+| **6 Launch readiness** | Runbook, onboarding, observability | ⚪ queued |
+
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full exit criteria per phase.
+
+### Context (for humans and coding agents)
+
+- **What this repo is.** A monorepo with a FastAPI backend (`apps/api`), a Hatchet worker process (`workflows/worker.py`), a Next.js 15 frontend (`apps/web`), and a CrewAI-style agent package (`agents/`). Supabase is the shared Postgres + Auth + Realtime layer.
+- **Golden path.** User pastes a YouTube URL → `POST /jobs` → `POST /jobs/{id}/scan` (yt-dlp) → `POST /jobs/{id}/start` → Hatchet fans out per video → agents stream tokens into `agent_logs` → frontend subscribes via Supabase Realtime.
+- **Entry points for agents.** Start at [`AGENTS.md`](AGENTS.md) (root spec). Runtime-agent contracts are in [`docs/AGENTS.md`](docs/AGENTS.md). The dev-harness skills under [`.agents/skills/`](.agents/skills) describe every workflow you'll need to touch.
+- **Where the work happens.** All feature work goes through PRs onto `main`. `production` is a fast-forward-only mirror of `main`, protected, and is the deploy target. See [`docs/BRANCHING.md`](docs/BRANCHING.md).
+- **Hosting is pluggable.** The API and worker ship as plain Dockerfile-less processes driven by [`Procfile`](Procfile) + env vars. [`railway.json`](railway.json) is the first-class config; pointing at Fly.io, Render, or any other PaaS requires no code changes — swap the config + env and redeploy.
 
 Kidroo is a chat-first, agent-native web app that turns a pasted YouTube URL (channel, playlist, or single video) into a fully scheduled upload on one or more of your owned YouTube channels. Five specialized AI agents collaborate in real time — scanning the source, researching context, generating SEO metadata, downloading the asset, and uploading via Composio's OAuth bridge — with every reasoning step, tool call, and status change streaming live into the UI.
 
@@ -74,7 +92,7 @@ User pastes:  https://youtube.com/@sourcechannel
 └──────────────┬───────────────────────────────────────────────────────────────┘
                │ HTTPS + Realtime WSS (Supabase)
                ▼
-┌────────────────────── FastAPI (Python 3.11 @ Koyeb free tier) ───────────────┐
+┌────────────────────── FastAPI (Python 3.12 @ Railway Hobby) ─────────────────┐
 │  POST /jobs        → validates URL, inserts jobs row, enqueues Hatchet run   │
 │  GET  /jobs/:id    → returns job + video rows + recent agent_logs             │
 │  POST /jobs/:id/select → user submits video selection + channel + schedule   │
@@ -82,7 +100,7 @@ User pastes:  https://youtube.com/@sourcechannel
 └──────────────┬───────────────────────────────────────────────────────────────┘
                │ Hatchet Python SDK
                ▼
-┌────────────────── Hatchet (self-hosted on Koyeb or Hatchet Cloud free) ──────┐
+┌────────────────── Hatchet Cloud (control plane) + Railway worker ────────────┐
 │  Durable workflow orchestrator — Postgres-backed, checkpointed                │
 │  Workflow: scan_channel → fan-out → per-video pipeline                        │
 │  Concurrency: max 6 concurrent videos per user                                │
@@ -132,8 +150,9 @@ A more detailed version with data flow and failure modes lives in [`docs/ARCHITE
 
 | Layer | Choice | Why |
 |---|---|---|
-| Server | **FastAPI (Python 3.11)** | Async, CrewAI-native, typed |
-| Hosting | **Koyeb free tier** | True always-on free VM (vs Railway's expired free tier) |
+| Server | **FastAPI (Python 3.12)** | Async, typed, streaming-friendly |
+| Hosting (API) | **Railway** (Hobby / trial credit) | Nixpacks-driven `Procfile` build, HTTPS out of the box, one-click env var swap to move accounts |
+| Hosting (worker) | **Railway** (separate service, same repo) | Long-running Hatchet worker; scales independently of the API |
 | Dependency mgr | **uv** | Fast, lockfile-first, PEP 621 |
 | Package mgr (JS) | **pnpm + Turborepo** | Workspace + cached builds |
 
@@ -141,7 +160,7 @@ A more detailed version with data flow and failure modes lives in [`docs/ARCHITE
 
 | Layer | Choice | Why |
 |---|---|---|
-| Durable orchestrator | **Hatchet** (self-host on Koyeb) | Python-native, Postgres-backed, closest DX to Trigger.dev, fully free to self-host |
+| Durable orchestrator | **Hatchet Cloud** (free tier) + Railway worker | Python-native v1 SDK, Postgres-backed, closest DX to Trigger.dev. Self-host fallback documented. |
 | Fallback orchestrator | **Temporal** | If Hatchet proves insufficient — Python SDK, free cloud tier |
 | Concurrency | `max_concurrency=6` per user | Configured on the `process_video` Hatchet task |
 
@@ -195,7 +214,7 @@ All secrets are loaded from environment variables. See [`.env.example`](.env.exa
 | `HATCHET_CLIENT_TOKEN` | Hatchet (durable workflows) | https://hatchet.run (cloud) or self-host | Free |
 | `NEXT_PUBLIC_SUPABASE_URL` | Frontend Supabase URL | = `SUPABASE_URL` | — |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Frontend Supabase anon key | = `SUPABASE_ANON_KEY` | — |
-| `NEXT_PUBLIC_API_BASE_URL` | Frontend → backend base URL | Koyeb deploy URL | — |
+| `NEXT_PUBLIC_API_BASE_URL` | Frontend → backend base URL | Railway API public URL | — |
 
 **YouTube credentials are *not* stored in env.** They are attached per-channel via Composio OAuth using `composio connections create --toolkit YOUTUBE --user-id <app_user_id>` and stored as Composio entity IDs in the `channels` table.
 
@@ -301,10 +320,10 @@ The roadmap is phase-based, not day-based. Each phase has an **exit criterion** 
 **Scope**
 - Supabase project created, migration applied, Realtime enabled on `agent_logs`.
 - Supabase Auth configured (email + password **default**, magic link optional, Google OAuth togglable) with email allowlist via `before_signup` Edge Function + RLS on `allowed_emails`.
-- Koyeb free VM running a placeholder FastAPI `/health` endpoint.
-- Vercel deploying a placeholder Next.js page connected to Supabase auth.
-- Hatchet control plane reachable (cloud free tier or self-hosted on Koyeb).
-- All API keys provisioned and injected into Koyeb + Vercel env.
+- Railway free-tier services running `apps/api` (FastAPI `/health`) and `workflows/worker.py` (Hatchet worker) behind public URLs.
+- Vercel deploying `apps/web` connected to Supabase auth.
+- Hatchet Cloud control plane reachable (free tier) — self-host path documented as fallback.
+- All API keys provisioned and injected into Railway + Vercel env.
 - One Composio YouTube entity connected end-to-end; `YOUTUBE_UPLOAD_VIDEO` smoke-tested with a 10-second dummy MP4.
 
 **Exit criterion:** a user can sign in to the deployed Vercel app (email+password or magic link or Google) and see their (empty) channel list pulled from Supabase.
@@ -401,6 +420,15 @@ uv run fastapi dev apps/api/main.py  # runs apps/api
 uv run python -m workflows.worker
 ```
 
+## Deploying
+
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full recipe. Short version:
+
+- **API + worker** → Railway (two services, same repo, driven by [`Procfile`](Procfile) + [`nixpacks.toml`](nixpacks.toml) + [`railway.json`](railway.json)).
+- **Frontend** → Vercel Hobby, root directory `apps/web`.
+- **Hatchet** → Hatchet Cloud free tier; self-host fallback documented.
+- **Swapping Railway accounts** or moving to Fly.io / Render is a config change only — no code changes required. See the [provider-switch section](docs/DEPLOYMENT.md#switching-provider-flyio--render--).
+
 ---
 
 ## Documentation index
@@ -415,6 +443,8 @@ uv run python -m workflows.worker
 | [`docs/UI_SPEC.md`](docs/UI_SPEC.md) | shadcn component inventory + GSAP animation spec |
 | [`docs/TECH_STACK.md`](docs/TECH_STACK.md) | Every library, version, and justification |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phased delivery plan (same content as above, deeper detail) |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Railway + Vercel deploy recipe; provider-switch steps (Fly.io / Render) |
+| [`docs/BRANCHING.md`](docs/BRANCHING.md) | `production` / `main` / `devin/*` workflow + branch-protection rules |
 | [`.agents/README.md`](.agents/README.md) | How to use in-repo dev-agent skills |
 | [`.skills/README.md`](.skills/README.md) | External vendor agent-skills manifest (installed via `npx skills`) |
 
@@ -483,7 +513,7 @@ Documented openly so they are not discovered late.
 
 5. **Firecrawl 500 pages/mo.** Scrape results must be cached in Supabase keyed by `sha256(url)` with a 7-day TTL.
 
-6. **Ephemeral `/tmp`.** Koyeb containers are ephemeral and have limited disk. Downloads must be streamed through Composio's presigned-upload flow wherever possible; if local staging is required, bound the concurrent-download count and auto-purge on failure.
+6. **Ephemeral `/tmp`.** Railway containers are ephemeral and have limited disk. Downloads must be streamed through Composio's presigned-upload flow wherever possible; if local staging is required, bound the concurrent-download count and auto-purge on failure. The download agent already isolates per-(job, video) subdirs to avoid concurrent-write collisions.
 
 7. **Auth allowlist.** Supabase Auth supports email/password, magic link, and OAuth — any of which lets anyone sign up by default. The allowlist is enforced server-side via a `before_signup` Edge Function **and** RLS on `allowed_emails` (belt + braces).
 

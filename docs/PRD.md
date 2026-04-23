@@ -8,7 +8,7 @@
 
 > **Changelog vs v1.0:**
 > - Replaced Trigger.dev (TypeScript-only) with **Hatchet** (Python-native, Postgres-backed durable workflows). Temporal is the documented fallback.
-> - Replaced Railway (no true free tier) with **Koyeb free**.
+> - Hosting is **provider-pluggable**: API + worker ship as plain `Procfile` processes. Current target is **Railway Hobby** (free trial credit, one-click env var swap to move accounts); Fly.io / Render are drop-in alternates with no code changes.
 > - Removed **LangChain** — CrewAI already abstracts LLM config; the extra layer was redundant.
 > - Removed redundant WebSocket layer — all realtime streaming now goes through **Supabase Realtime** only. FastAPI exposes plain REST.
 > - Added **GSAP** as the primary animation library (alongside Framer Motion for shadcn-native entrances).
@@ -55,7 +55,7 @@ Three design principles:
 - Firecrawl: 500 pages/month → use a 7-day URL-keyed cache.
 - Exa: free tier.
 - Supabase: 500 MB DB, 2 GB realtime bandwidth, free auth.
-- Hatchet: free self-host on Koyeb OR free cloud tier.
+- Hatchet: free cloud tier (primary) with self-host fallback on Railway or any Docker host.
 - YouTube: **6 uploads per day per Google Cloud project** (upload costs ~1,600 units of a 10k-unit default quota). For per-channel quota, provision one GCP project + Composio custom OAuth app per channel. Phase 2 exits with quota strategy chosen.
 
 ---
@@ -132,7 +132,7 @@ Job persists in Supabase — user can close tab and return
 | Component | Tool | Justification |
 |---|---|---|
 | Server | FastAPI (Python 3.11) | Async, typed, CrewAI-native |
-| Hosting | **Koyeb free** | True always-on free VM (Railway free tier expired) |
+| Hosting | **Railway** (Hobby / trial credit) + `Procfile` | Provider-pluggable: same `Procfile` + env surface runs on Fly.io, Render, or any PaaS. |
 | Dep mgr | **uv** | Fast, deterministic |
 
 ### Workflow
@@ -315,7 +315,7 @@ See [`UI_SPEC.md`](UI_SPEC.md).
 | Composio upload error | Non-zero response | Hatchet retry 3× (30 s, 60 s, 120 s); then notify in chat |
 | Composio ghost-upload (bug #2954) | `fileDetails.fileSize == null` on YouTube after 60 s | Hatchet compensating action: delete ghost + re-upload; cap at 3 retries |
 | Supabase disconnect | Realtime close | JS client auto-reconnects |
-| Koyeb restart | Process exit | Hatchet resumes from last checkpoint |
+| Railway container restart | Process exit | Hatchet resumes from last checkpoint; FastAPI is stateless. |
 | YouTube quota exceeded | Composio error code | Queue remaining to next day; show remaining schedule in chat |
 | `/tmp` full | OSError | Reject new downloads; purge failed-job temp files |
 

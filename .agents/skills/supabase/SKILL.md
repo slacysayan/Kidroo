@@ -21,7 +21,7 @@ All schema changes go through numbered migration files in `supabase/migrations/`
 # Option A — Supabase CLI (preferred)
 supabase db push
 
-# Option B — direct psql (for Koyeb CI jobs where the Supabase CLI isn't installed)
+# Option B — direct psql (for Railway / CI jobs where the Supabase CLI isn't installed)
 psql "$SUPABASE_DB_URL" -f supabase/migrations/00X_whatever.sql
 ```
 

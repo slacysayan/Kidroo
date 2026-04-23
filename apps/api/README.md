@@ -1,6 +1,6 @@
 # `apps/api` — Kidroo backend
 
-FastAPI (Python 3.11+) — stateless REST. Realtime fanout happens via Supabase Realtime, not here.
+FastAPI (Python 3.12+) — stateless REST. Realtime fanout happens via Supabase Realtime, not here.
 
 ## Run
 
@@ -8,7 +8,7 @@ FastAPI (Python 3.11+) — stateless REST. Realtime fanout happens via Supabase 
 # From repo root
 uv run fastapi dev apps/api/main.py    # dev server on :8000
 
-# Prod (Koyeb)
+# Prod (Railway / Fly / Render / any PaaS — same command, driven by Procfile.api)
 uv run uvicorn apps.api.main:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 

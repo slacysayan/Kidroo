@@ -63,7 +63,7 @@ If you add a feature that expands the attack surface (e.g. auto-upload triggers,
 ## /tmp and staging files
 
 - Downloaded videos are staged under `/tmp/kidroo/<job_id>/<video_id>.mp4`.
-- Koyeb containers are ephemeral — `/tmp` evaporates on restart. That is fine because Hatchet resumes from the last checkpoint (re-downloads if necessary).
+- Railway containers (and any other PaaS we deploy on) are ephemeral — `/tmp` evaporates on restart. That is fine because Hatchet resumes from the last checkpoint (re-downloads if necessary).
 - **Always** delete the staged file on upload success, on upload failure, and on job cancellation.
 - `/tmp/kidroo/` is purged on worker boot.
 

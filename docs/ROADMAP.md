@@ -28,10 +28,11 @@ A new contributor reads `README.md` + `AGENTS.md` and can identify the next file
 - Supabase project provisioned; migration applied.
 - Supabase Realtime enabled on `agent_logs`.
 - Supabase Auth magic link configured with an email allowlist (enforced at RLS + `before_signup` Edge Function).
-- Koyeb free VM running a placeholder FastAPI `/health` endpoint.
-- Vercel deploying a placeholder Next.js page.
-- Hatchet control plane reachable (cloud or self-host).
-- All API keys provisioned and loaded into Koyeb + Vercel secrets.
+- Railway service running `apps/api` (FastAPI `/health`) via `Procfile.api`.
+- Railway service running `workflows/worker.py` (Hatchet worker) via `Procfile.worker`.
+- Vercel deploying `apps/web`.
+- Hatchet Cloud control plane reachable; self-host on Railway documented as fallback.
+- All API keys provisioned and loaded into Railway + Vercel secrets.
 - One Composio YouTube entity connected end-to-end.
 - `YOUTUBE_UPLOAD_VIDEO` smoke-tested with a 10-second dummy MP4.
 
@@ -125,7 +126,7 @@ Nightly smoke test green for 7 consecutive days.
 - Observability: Supabase SQL views for job throughput, LLM usage, upload success rate.
 - ToS + copyright risk register with mitigations signed off.
 - Backup/export story for `jobs` + `agent_logs` (Supabase scheduled pg_dump to Storage bucket).
-- Optional: Turnkey provisioning script (`scripts/bootstrap.sh`) that creates Supabase project + Koyeb service + Vercel project in one shot.
+- Optional: Turnkey provisioning script (`scripts/bootstrap.sh`) that creates Supabase project + Railway services + Vercel project in one shot (works against any Railway account by reading the standard CLI auth).
 
 ### Exit criterion
 

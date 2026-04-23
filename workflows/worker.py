@@ -4,8 +4,8 @@ Usage:
     python -m workflows.worker
 
 Registers both `process_video` and `process_video_batch` with the Hatchet
-control plane and blocks forever. Koyeb runs one replica of this as a
-persistent worker.
+control plane and blocks forever. Deployed as a long-running Railway
+service (see `Procfile` + `railway.json`); one replica is sufficient.
 """
 from __future__ import annotations
 
