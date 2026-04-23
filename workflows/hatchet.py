@@ -31,4 +31,19 @@ def get_hatchet() -> Hatchet:
     return Hatchet(debug=settings.log_level.lower() == "debug")
 
 
-hatchet = get_hatchet()
+class _HatchetProxy:
+    """Lazy import-safe facade around :func:`get_hatchet`.
+
+    ``from workflows.hatchet import hatchet`` must not crash if Hatchet
+    credentials aren't fully wired yet (e.g. during docs generation, tests
+    that never touch the workflow, or ``/health`` probes before env is set).
+    The client is built on first attribute access.
+    """
+
+    __slots__ = ()
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(get_hatchet(), name)
+
+
+hatchet = _HatchetProxy()

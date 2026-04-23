@@ -66,7 +66,7 @@ jobs:
       - name: Install
         run: pnpm install --no-frozen-lockfile
       - name: Biome lint
-        run: pnpm exec biome lint . || echo "biome lint completed"
+        run: pnpm exec biome lint .
       - name: TypeScript
         run: pnpm typecheck
         env:
@@ -84,4 +84,4 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y shellcheck
-          shellcheck -S warning SKILLS.sh || true
+          shellcheck -S warning SKILLS.sh

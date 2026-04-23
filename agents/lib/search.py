@@ -162,8 +162,12 @@ async def deep_scrape(url: str) -> ScrapeResult:
     def _run() -> ScrapeResult:
         app = FirecrawlApp(api_key=settings.firecrawl_api_key.get_secret_value())
         resp: dict[str, Any] = app.scrape_url(url, params={"formats": ["markdown"]})
-        md = resp.get("markdown") or resp.get("data", {}).get("markdown", "")
-        title = (resp.get("metadata") or {}).get("title")
+        # firecrawl-py v1.x nests the payload under "data" — tolerate either
+        # shape so the call keeps working if the SDK unwraps in a later bump.
+        payload: dict[str, Any] = resp.get("data") or resp
+        md = payload.get("markdown", "") or ""
+        metadata = payload.get("metadata") or {}
+        title = metadata.get("title")
         return ScrapeResult(url=url, markdown=md, title=title)
 
     return await asyncio.to_thread(_run)

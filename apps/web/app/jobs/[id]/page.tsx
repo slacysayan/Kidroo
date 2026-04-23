@@ -17,14 +17,18 @@ export default async function JobPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: job } = await supabase
+  const { data: job, error: jobError } = await supabase
     .from("jobs")
     .select("*")
     .eq("id", id)
     .maybeSingle();
+  if (jobError) throw jobError;
   if (!job) notFound();
 
-  const [{ data: videos }, { data: channels }] = await Promise.all([
+  const [
+    { data: videos, error: videosError },
+    { data: channels, error: channelsError },
+  ] = await Promise.all([
     supabase
       .from("videos")
       .select("*")
@@ -35,6 +39,8 @@ export default async function JobPage({
       .select("id, name, composio_entity_id, connected")
       .eq("connected", true),
   ]);
+  if (videosError) throw videosError;
+  if (channelsError) throw channelsError;
 
   return (
     <div className="flex min-h-screen flex-col">

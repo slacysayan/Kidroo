@@ -28,8 +28,8 @@ Rules:
 - If the user does not specify a timezone, default to UTC.
 - If the user does not specify a schedule, default to per_day=1 starting the
   next midnight UTC.
-- If the channel is ambiguous, pick the best match by fuzzy name and
-  include a metadata note in `schedule.note`.
+- If the channel is ambiguous, pick the best fuzzy-name match and do NOT add
+  any extra keys — the schema above is exhaustive.
 
 No preamble. No markdown. No explanation. JSON only.
 """

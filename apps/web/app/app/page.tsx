@@ -15,7 +15,7 @@ export default async function AppPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: channels }, { data: jobs }] = await Promise.all([
+  const [channelsRes, jobsRes] = await Promise.all([
     supabase
       .from("channels")
       .select("id, name, composio_entity_id, created_at, connected")
@@ -26,6 +26,10 @@ export default async function AppPage() {
       .order("created_at", { ascending: false })
       .limit(10),
   ]);
+  if (channelsRes.error) throw channelsRes.error;
+  if (jobsRes.error) throw jobsRes.error;
+  const channels = channelsRes.data ?? [];
+  const jobs = jobsRes.data ?? [];
 
   return (
     <div className="flex min-h-screen flex-col">

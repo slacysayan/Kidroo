@@ -21,6 +21,10 @@ export default function SignOutButton() {
       }
       router.replace("/login");
       router.refresh();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unable to sign out. Please try again.";
+      toast.error(message);
     } finally {
       setPending(false);
     }

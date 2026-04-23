@@ -311,7 +311,10 @@ async def start_job(
     from workflows.hatchet import hatchet
 
     def _enqueue() -> str:
-        ref = hatchet.admin.run_workflow("process_video_batch", batch)
+        # Hatchet v1 SDK removed `admin.run_workflow`; the replacement is the
+        # synchronous `runs.create(workflow_name, input)` feature client. We
+        # still wrap it in `asyncio.to_thread` to keep the event loop free.
+        ref = hatchet.runs.create("process_video_batch", batch)
         return str(ref.workflow_run_id)
 
     try:
