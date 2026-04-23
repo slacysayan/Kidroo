@@ -172,6 +172,11 @@ async def stream_complete(
             await _flush()
     except Exception as groq_err:
         is_prestream = not generated
+        # Flush any buffered Groq tokens BEFORE flipping the provider label,
+        # otherwise the next `_flush()` call during the Cerebras stream would
+        # log the remaining Groq tokens with `provider="cerebras"` and corrupt
+        # the per-token provenance metadata in `agent_logs`.
+        await _flush(force=True)
         await logger.fallback(
             f"Groq stream failed ({type(groq_err).__name__}); failing over to Cerebras",
             provider_from="groq",

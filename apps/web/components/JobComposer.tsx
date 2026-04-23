@@ -22,9 +22,21 @@ export function JobComposer() {
     setPending(true);
     try {
       const supabase = createBrowserSupabaseClient();
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user) {
+        toast.error(authError?.message ?? "please sign in again");
+        return;
+      }
       const { data, error } = await supabase
         .from("jobs")
-        .insert({ source_url: url.trim(), status: "pending" })
+        .insert({
+          user_id: user.id,
+          source_url: url.trim(),
+          status: "pending",
+        })
         .select("id")
         .single();
       if (error || !data) {
