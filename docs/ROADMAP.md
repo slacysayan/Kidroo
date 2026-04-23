@@ -37,7 +37,7 @@ A new contributor reads `README.md` + `AGENTS.md` and can identify the next file
 
 ### Exit criterion
 
-A magic-link user logs into the deployed Vercel app and sees an empty channel list pulled from Supabase.
+A Supabase Auth (email+password / magic link / Google OAuth) user logs into the deployed Vercel app and sees an empty channel list pulled from Supabase.
 
 ---
 

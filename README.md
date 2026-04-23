@@ -153,7 +153,7 @@ A more detailed version with data flow and failure modes lives in [`docs/ARCHITE
 |---|---|---|
 | Database | **Supabase Postgres** | Free 500 MB, also powers Realtime |
 | Realtime | **Supabase Realtime** | Broadcasts `agent_logs` inserts to the browser |
-| Auth | **Supabase Auth (magic link)** | Single-tenant app, 4–5 email allowlist |
+| Auth | **Supabase Auth (email + password, magic link, Google OAuth)** | Full Supabase Auth — users pick their flow; allowlist enforced server-side |
 | Object storage | **Supabase Storage** | Thumbnails, temp file references (videos stream through Composio's R2) |
 
 ### AI & agents
@@ -300,14 +300,14 @@ The roadmap is phase-based, not day-based. Each phase has an **exit criterion** 
 
 **Scope**
 - Supabase project created, migration applied, Realtime enabled on `agent_logs`.
-- Magic-link auth configured with email allowlist.
+- Supabase Auth configured (email + password **default**, magic link optional, Google OAuth togglable) with email allowlist via `before_signup` Edge Function + RLS on `allowed_emails`.
 - Koyeb free VM running a placeholder FastAPI `/health` endpoint.
 - Vercel deploying a placeholder Next.js page connected to Supabase auth.
 - Hatchet control plane reachable (cloud free tier or self-hosted on Koyeb).
 - All API keys provisioned and injected into Koyeb + Vercel env.
 - One Composio YouTube entity connected end-to-end; `YOUTUBE_UPLOAD_VIDEO` smoke-tested with a 10-second dummy MP4.
 
-**Exit criterion:** a magic-link user can log into the deployed Vercel app and see their (empty) channel list pulled from Supabase.
+**Exit criterion:** a user can sign in to the deployed Vercel app (email+password or magic link or Google) and see their (empty) channel list pulled from Supabase.
 
 ### Phase 2 — Agent core
 
@@ -452,6 +452,7 @@ Adding a new external skill:
 | data | `supabase-postgres-best-practices` | `supabase/agent-skills` |
 | data | `skill-creator` | `supabase/agent-skills` |
 | integrations | `composio` | `composiohq/skills` |
+| integrations | `tavily` | `tavily-ai/tavily-python` |
 | integrations | `firecrawl` | `firecrawl/cli` |
 | integrations | `exa-search` | `benedictking/exa-search` |
 | integrations | `yt-dlp-downloader` | `mapleshaw/yt-dlp-downloader-skill` |
@@ -484,7 +485,7 @@ Documented openly so they are not discovered late.
 
 6. **Ephemeral `/tmp`.** Koyeb containers are ephemeral and have limited disk. Downloads must be streamed through Composio's presigned-upload flow wherever possible; if local staging is required, bound the concurrent-download count and auto-purge on failure.
 
-7. **Magic-link allowlist.** Supabase auth allows anyone to sign up by default. Enforce the email allowlist in a Supabase RLS policy plus a `before_signup` Edge Function.
+7. **Auth allowlist.** Supabase Auth supports email/password, magic link, and OAuth — any of which lets anyone sign up by default. The allowlist is enforced server-side via a `before_signup` Edge Function **and** RLS on `allowed_emails` (belt + braces).
 
 ---
 

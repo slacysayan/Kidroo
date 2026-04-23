@@ -47,7 +47,7 @@ Three design principles:
 
 **Primary users:** 4–5 internal collaborators managing faceless YouTube channels.
 
-**Auth model:** single internal app with magic-link login. Each app user can connect **multiple** YouTube channels via Composio OAuth. Channels are stored as named Composio entity IDs (e.g. `finance_daily`, `tech_weekly`) in the `channels` table, scoped per user.
+**Auth model:** single internal app backed by **Supabase Auth**. Users sign in via email + password (default), magic link, or Google OAuth — all three flows are enabled in the Supabase Dashboard. An email allowlist enforced by a `before_signup` Edge Function + RLS on `allowed_emails` keeps the app single-tenant. Each app user can connect **multiple** YouTube channels via Composio OAuth. Channels are stored as named Composio entity IDs (e.g. `finance_daily`, `tech_weekly`) in the `channels` table, scoped per user.
 
 **Scale ceiling (free tiers):**
 - Groq: 14,400 LLM req/day → ~3,600 videos/day at ~4 LLM calls each.
@@ -63,7 +63,7 @@ Three design principles:
 ## 4. Core user flow
 
 ```
-User opens app → authenticated via Supabase magic link
+User opens app → authenticated via Supabase Auth (email+password / magic link / OAuth)
      │
      ▼
 Chat interface loads, sidebar shows connected channels (Composio entities)
@@ -149,7 +149,7 @@ Job persists in Supabase — user can close tab and return
 |---|---|
 | Database | Supabase Postgres |
 | Realtime | Supabase Realtime (`agent_logs` table) |
-| Auth | Supabase Auth — magic link + email allowlist |
+| Auth | Supabase Auth — email+password, magic link, Google OAuth + email allowlist |
 | Storage | Supabase Storage (thumbnails, temp refs) |
 
 ### AI & agents
@@ -331,7 +331,7 @@ See [`README.md#risks--open-items`](../README.md#risks--open-items). Top items:
 4. **Quota model** — one GCP project = ~6 uploads/day aggregate.
 5. **Firecrawl 500/mo** — cache required.
 6. **Ephemeral `/tmp`** — stream or bound concurrency.
-7. **Magic-link allowlist** — must be enforced at RLS + `before_signup` Edge Function.
+7. **Auth allowlist** — must be enforced at RLS (on `allowed_emails`) + `before_signup` Edge Function. Covers every auth flow: email+password, magic link, and OAuth.
 
 ---
 

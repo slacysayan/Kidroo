@@ -22,7 +22,7 @@ Read this before touching anything that involves credentials, user data, or thir
 
 ## Auth allowlist
 
-Kidroo is a private internal tool. Supabase magic-link sign-up must be restricted to an email allowlist:
+Kidroo is a private internal tool. Supabase Auth (email+password / magic link / OAuth) sign-up must be restricted to an email allowlist:
 
 1. `auth.users.email` is validated against the `public.allowed_emails` table by a `before_signup` Edge Function.
 2. Belt-and-braces: a `select` RLS policy on every user-facing table also verifies the email is allowlisted.

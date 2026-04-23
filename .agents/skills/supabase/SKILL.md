@@ -80,7 +80,7 @@ EOF
 
 ## Email allowlist
 
-The magic-link auth allows any email to sign up by default. The allowlist is enforced in two places:
+Supabase Auth (email+password / magic link / OAuth) allows any email to sign up by default. The allowlist is enforced in two places:
 
 1. **`before_signup` Edge Function** — rejects emails not in the allowlist at signup.
 2. **RLS** — a belt-and-braces policy that refuses `select` to any `auth.uid()` whose email is not in the allowlist table.

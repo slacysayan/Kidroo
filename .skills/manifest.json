@@ -30,9 +30,15 @@
     },
     {
       "group": "integrations",
+      "source": "https://github.com/tavily-ai/tavily-python",
+      "skill": "tavily",
+      "why": "Tavily search SDK patterns — primary web-search surface for the research agent, with key-level failover."
+    },
+    {
+      "group": "integrations",
       "source": "https://github.com/firecrawl/cli",
       "skill": "firecrawl",
-      "why": "Firecrawl CLI + research-agent scraping patterns."
+      "why": "Firecrawl CLI + deep-scrape patterns (used when Tavily snippets aren't enough)."
     },
     {
       "group": "integrations",

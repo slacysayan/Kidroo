@@ -82,7 +82,7 @@
 
 ┌──────────────────── Supabase Postgres (free tier) ────────────────────┐
 │  Tables:                                                              │
-│    auth.users            (Supabase Auth — magic link)                 │
+│    auth.users            (Supabase Auth — email+pw / magic / OAuth)   │
 │    public.channels       (Composio entity IDs, per user)              │
 │    public.jobs           (one row per user submission)                │
 │    public.videos         (one row per selected video)                 │

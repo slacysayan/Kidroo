@@ -12,7 +12,8 @@ Both providers are OpenAI-compatible. The runtime **always streams** — every a
 
 - **Endpoint:** OpenAI-compatible, `https://api.groq.com/openai/v1`
 - **Env:** `GROQ_API_KEY`
-- **Model slug:** `llama-3.1-70b-versatile`
+- **Model slug (default):** `llama-3.3-70b-versatile` (configurable via `GROQ_MODEL`)
+- **Alternatives on free tier:** `openai/gpt-oss-120b`, `moonshotai/kimi-k2-instruct-0905`
 - **Rate limit:** 14,400 requests/day (free tier)
 - **SDK:** `groq` (Python)
 
@@ -22,7 +23,7 @@ from groq import AsyncGroq
 client = AsyncGroq(api_key=os.environ["GROQ_API_KEY"])
 
 stream = await client.chat.completions.create(
-    model="llama-3.1-70b-versatile",
+    model="llama-3.3-70b-versatile",
     messages=[{"role": "system", "content": SYSTEM_PROMPT},
               {"role": "user", "content": user_input}],
     temperature=0.3,
@@ -40,8 +41,8 @@ async for chunk in stream:
 
 - **Endpoint:** `https://api.cerebras.ai/v1`
 - **Env:** `CEREBRAS_API_KEY`
-- **Model slug:** `llama3.1-70b`
-- **Rate limit:** ~2,000 req/day free
+- **Model slug (default):** `llama-3.3-70b` (configurable via `CEREBRAS_MODEL`)
+- **Rate limit:** ~2,000 req/day free; sub-second TTFB
 - **SDK:** `cerebras-cloud-sdk` (Python)
 
 ```python
@@ -99,7 +100,35 @@ The wrapper is the single contract between agents and inference providers. Swapp
 
 ---
 
-## Firecrawl
+## Tavily — primary web search (with fallback key)
+
+Tavily is the research agent's **primary** search surface: fast, structured, returns ranked results plus snippets in one hop. Firecrawl is reserved for the slower "give me the full markdown of this URL" path.
+
+- **Endpoint:** `https://api.tavily.com`
+- **Env:** `TAVILY_API_KEY` (primary), `TAVILY_API_KEY_FALLBACK` (auto-failover on 429 / 5xx)
+- **SDK:** `tavily-python`
+
+```python
+from tavily import AsyncTavilyClient
+
+client = AsyncTavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+
+resp = await client.search(
+    query=f"{video_title} {niche}",
+    max_results=5,
+    search_depth="basic",   # "advanced" for deeper but slower
+)
+for r in resp["results"]:
+    r["title"], r["url"], r["content"], r["score"]
+```
+
+Failover: `agents.lib.search.search_web()` transparently retries with `TAVILY_API_KEY_FALLBACK` on the first request-level exception (429 / 5xx / timeout). Both keys exhausted → `RuntimeError`.
+
+---
+
+## Firecrawl — deep scrape (single-URL markdown)
+
+Used when Tavily's snippet is insufficient and we need the full page body.
 
 - **Endpoint:** `https://api.firecrawl.dev/v1`
 - **Env:** `FIRECRAWL_API_KEY`
