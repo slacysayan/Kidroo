@@ -139,5 +139,3 @@ export function AgentLogTimeline({ jobId }: { jobId: string }) {
     </ol>
   );
 }
-
-export default AgentLogTimeline;

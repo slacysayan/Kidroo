@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-import Header from "@/components/Header";
-import JobComposer from "@/components/JobComposer";
+import { Header } from "@/components/Header";
+import { JobComposer } from "@/components/JobComposer";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 /**

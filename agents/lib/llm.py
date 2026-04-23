@@ -184,13 +184,16 @@ async def stream_complete(
         provider = "cerebras"
 
         # ── Attempt 2: Cerebras (continues from already-generated text) ─
+        # Drop the Groq-specific `model` override so Cerebras falls back to
+        # its own default slug; a Groq slug like `llama-3.3-70b-versatile`
+        # is not a valid Cerebras model.
         try:
             async for delta in _cerebras_stream(
                 system=system,
                 user=user,
                 assistant_prefix=generated or None,
                 response_format=response_format,
-                model=model,
+                model=None,
                 extra=extra,
             ):
                 generated += delta

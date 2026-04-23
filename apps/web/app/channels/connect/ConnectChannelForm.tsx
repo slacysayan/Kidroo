@@ -15,7 +15,7 @@ function slugify(input: string): string {
     .slice(0, 48);
 }
 
-export default function ConnectChannelForm({ userId }: { userId: string }) {
+export function ConnectChannelForm({ userId }: { userId: string }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [entity, setEntity] = useState("");

@@ -28,7 +28,7 @@ async function callApi(
   body?: unknown,
 ): Promise<Response> {
   return fetch(`${API_BASE}${path}`, {
-    method: body ? "POST" : "POST",
+    method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${token}`,
@@ -37,7 +37,7 @@ async function callApi(
   });
 }
 
-export default function JobActions({
+export function JobActions({
   jobId,
   status,
   videos,

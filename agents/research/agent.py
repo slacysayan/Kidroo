@@ -8,6 +8,7 @@ and the original page has a transcript).
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -70,7 +71,8 @@ class ResearchAgent(BaseAgent[ResearchInput, ResearchOutput]):
         exa_results: list[SearchResult] = []
         try:
             exa_results = await semantic_search(
-                f"{inp.video_title} trending angles 2025", num_results=5
+                f"{inp.video_title} trending angles {datetime.now(UTC).year}",
+                num_results=5,
             )
             await self.log.tool_call("exa.semantic_search", n=len(exa_results))
         except Exception as e:

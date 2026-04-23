@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
-export default function SignOutButton() {
+export function SignOutButton() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 

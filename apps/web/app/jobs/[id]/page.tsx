@@ -1,8 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
-import AgentLogTimeline from "@/components/AgentLogTimeline";
-import Header from "@/components/Header";
-import JobActions from "./JobActions";
+import { AgentLogTimeline } from "@/components/AgentLogTimeline";
+import { Header } from "@/components/Header";
+import { JobActions } from "./JobActions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export default async function JobPage({

@@ -57,5 +57,3 @@ export function JobComposer() {
     </form>
   );
 }
-
-export default JobComposer;

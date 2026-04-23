@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 
-import Header from "@/components/Header";
+import { Header } from "@/components/Header";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import ConnectChannelForm from "./ConnectChannelForm";
+import { ConnectChannelForm } from "./ConnectChannelForm";
 
 /**
  * "Connect a YouTube channel" screen.

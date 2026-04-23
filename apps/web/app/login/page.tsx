@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { sanitizeNext } from "@/lib/auth/sanitize-next";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 /**
@@ -19,7 +20,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 export default function LoginPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") ?? "/app";
+  const next = sanitizeNext(params.get("next"));
 
   const [mode, setMode] = useState<"password" | "magic" | "signup">("password");
   const [email, setEmail] = useState("");

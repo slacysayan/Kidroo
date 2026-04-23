@@ -1,4 +1,4 @@
-"""Durable workflow: research → metadata → download → upload, per source video.
+"""Durable workflow: per-video DAG — download runs in parallel with research.
 
 Shape:
     ┌──────────────┐
@@ -6,13 +6,16 @@ Shape:
     └──────┬───────┘
            │  fan out (one `process_video` run per video, concurrency ≤ 6/user)
            ▼
-    ┌──────────────┐      ┌──────────────┐
-    │ research     │ ───▶ │ metadata     │
-    └──────────────┘      └──────┬───────┘
-                                 ▼
-                          ┌──────────────┐      ┌──────────────┐
-                          │ download     │ ───▶ │ upload       │
-                          └──────────────┘      └──────────────┘
+    ┌──────────────┐                           ┌──────────────┐
+    │ research     │ ──▶ ┌──────────────┐ ──┐  │ download     │
+    └──────────────┘     │ metadata     │   │  └──────┬───────┘
+                         └──────────────┘   ├──▶ ┌──────────────┐
+                                            │    │ upload       │
+                                            └──▶ └──────────────┘
+
+`research` and `download` have no parents so they execute concurrently.
+`metadata` depends on `research`. `upload` depends on both `download` and
+`metadata`.
 
 Uses the Hatchet v1 SDK: `hatchet.workflow(...).task(...)` with `parents=[...]`
 for DAG edges. LLMUnavailableError is re-raised as NonRetryableException so
@@ -104,7 +107,6 @@ async def metadata_task(inp: ProcessVideoInput, ctx: Context) -> dict[str, Any]:
 
 @process_video.task(
     name="download",
-    parents=[metadata_task],
     execution_timeout=timedelta(minutes=30),
     retries=1,
 )
@@ -117,7 +119,7 @@ async def download_task(inp: ProcessVideoInput, ctx: Context) -> dict[str, Any]:
 
 @process_video.task(
     name="upload",
-    parents=[download_task],
+    parents=[download_task, metadata_task],
     execution_timeout=timedelta(minutes=30),
     retries=1,
 )

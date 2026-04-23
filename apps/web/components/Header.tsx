@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import SignOutButton from "./SignOutButton";
+import { SignOutButton } from "./SignOutButton";
 
 export function Header({ email }: { email?: string | null }) {
   return (
@@ -20,5 +20,3 @@ export function Header({ email }: { email?: string | null }) {
     </header>
   );
 }
-
-export default Header;
