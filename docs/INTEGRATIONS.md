@@ -4,7 +4,11 @@ Single source of truth for every external API the runtime touches. If a call in 
 
 ---
 
-## Groq (primary LLM)
+## LLM providers — Groq (primary) + Cerebras (fallback), streaming
+
+Both providers are OpenAI-compatible. The runtime **always streams** — every agent consumes an async iterator of tokens, not a single blob. Streaming is what powers the live "agent brain" UX: partial reasoning is flushed to `agent_logs` as it arrives, and Supabase Realtime pushes it to the browser so the user sees the agent think in real time.
+
+### Groq (primary)
 
 - **Endpoint:** OpenAI-compatible, `https://api.groq.com/openai/v1`
 - **Env:** `GROQ_API_KEY`
@@ -17,19 +21,22 @@ from groq import AsyncGroq
 
 client = AsyncGroq(api_key=os.environ["GROQ_API_KEY"])
 
-resp = await client.chat.completions.create(
+stream = await client.chat.completions.create(
     model="llama-3.1-70b-versatile",
     messages=[{"role": "system", "content": SYSTEM_PROMPT},
               {"role": "user", "content": user_input}],
     temperature=0.3,
-    response_format={"type": "json_object"},   # for metadata agent
+    response_format={"type": "json_object"},   # structured agents (metadata, orchestrator)
     max_tokens=1024,
+    stream=True,                               # ALWAYS stream
 )
+
+async for chunk in stream:
+    token = chunk.choices[0].delta.content or ""
+    # → agents.lib.llm buffers + periodically flushes to agent_logs
 ```
 
----
-
-## Cerebras (fallback LLM)
+### Cerebras (fallback)
 
 - **Endpoint:** `https://api.cerebras.ai/v1`
 - **Env:** `CEREBRAS_API_KEY`
@@ -42,16 +49,53 @@ from cerebras.cloud.sdk import AsyncCerebras
 
 client = AsyncCerebras(api_key=os.environ["CEREBRAS_API_KEY"])
 
-resp = await client.chat.completions.create(
+stream = await client.chat.completions.create(
     model="llama3.1-70b",
     messages=[...],
     temperature=0.3,
+    stream=True,
 )
+async for chunk in stream:
+    token = chunk.choices[0].delta.content or ""
 ```
 
-### Failover wrapper
+### Shared wrapper — `agents/lib/llm.py`
 
-`agents/lib/llm.py` exposes `complete(messages, **kwargs)` which tries Groq first, catches `429 | 5xx`, logs `step='fallback'`, and retries on Cerebras. Agents never import Groq/Cerebras directly — they always go through `agents.lib.llm`.
+Agents never import `groq` or `cerebras` directly. They call the shared streaming wrapper:
+
+```python
+from agents.lib.llm import stream_complete
+
+async for delta in stream_complete(
+    system=SYSTEM_PROMPT,
+    user=user_input,
+    response_format="json",            # or "text"
+    temperature=0.3,
+    max_tokens=1024,
+    job_id=ctx.job_id,                 # so partial tokens stream to agent_logs
+    video_id=ctx.video_id,
+    agent=self.name,
+):
+    # delta is a str; accumulate into a buffer for final parsing if needed
+    buf += delta
+```
+
+**Behavior:**
+
+1. **Primary attempt — Groq stream.** Opens a streaming request to Groq. Yields deltas as they arrive. Every N tokens (default 32) or every M milliseconds (default 400 ms), the wrapper inserts one `agent_logs` row with `step="reasoning"` and `metadata={"partial": True, "provider": "groq"}`. The browser renders these as they stream via Supabase Realtime.
+
+2. **Pre-stream failover.** If Groq returns `429 | 5xx | connection error` before any tokens arrive, the wrapper logs `step="fallback"` and immediately opens a Cerebras stream. The caller is unaware — the async iterator keeps yielding.
+
+3. **Mid-stream failover.** If the Groq connection drops mid-stream (network error, server close, rate limit mid-response), the wrapper:
+   - logs `step="fallback"` with `metadata={"reason": "mid_stream_dropout", "tokens_so_far": N}`,
+   - re-issues the same request against Cerebras with the already-generated tokens prepended as an assistant turn (so the model continues rather than restarting),
+   - continues yielding deltas transparently to the caller.
+
+4. **Final logging.** When the stream completes, one more `agent_logs` row with `step="reasoning"`, `metadata={"partial": False, "provider": "<final>", "tokens": N, "latency_ms": T, "fallback_occurred": bool}` is written. Agents use this final row to attach the full text for downstream parsing.
+
+5. **Hard failure.** If both providers fail, `stream_complete` raises `LLMUnavailableError`, which Hatchet treats as a non-retryable failure (user will see a `step="error"` row with a retry button in the UI).
+
+The wrapper is the single contract between agents and inference providers. Swapping models, adding a third provider, or changing the partial-flush cadence happens in exactly one file.
 
 ---
 

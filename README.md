@@ -94,7 +94,7 @@ User pastes:  https://youtube.com/@sourcechannel
 │  Every step writes to Supabase agent_logs → broadcasts to browser             │
 └──────────────┬───────────────────────────────────────────────────────────────┘
                │
-               ├──► Groq / Cerebras     (LLM inference, free tiers)
+               ├──► Groq / Cerebras     (streaming LLM inference — Groq primary, Cerebras takes over on pre- or mid-stream failure)
                ├──► Firecrawl           (web scraping, 500/mo free)
                ├──► Exa                 (semantic search, free tier)
                ├──► yt-dlp              (local subprocess, no key)
@@ -156,9 +156,9 @@ A more detailed version with data flow and failure modes lives in [`docs/ARCHITE
 | Layer | Choice | Why |
 |---|---|---|
 | Agent framework | **CrewAI** | Multi-agent, tool-calling, Python-first |
-| LLM (primary) | **Groq — LLaMA 3.1 70B Versatile** | 14,400 req/day free, fastest inference |
-| LLM (fallback) | **Cerebras — LLaMA 3.1 70B** | ~2,000 req/day free, auto-failover on 429 |
-| LLM config | **CrewAI native LLM wrapper** | No LangChain layer — CrewAI already abstracts |
+| LLM (primary) | **Groq — LLaMA 3.1 70B Versatile** | 14,400 req/day free, fastest inference; **always streamed** |
+| LLM (fallback) | **Cerebras — LLaMA 3.1 70B** | ~2,000 req/day free; transparent re-routing on pre-stream OR mid-stream failure |
+| LLM config | **CrewAI native + shared `stream_complete` wrapper** | No LangChain. Partial tokens flow into `agent_logs` as they arrive, so the browser renders the agent thinking in real time. |
 
 > Note: the original PRD specified LangChain as an abstraction layer. CrewAI already handles this — adding LangChain is redundant.
 

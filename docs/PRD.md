@@ -157,9 +157,11 @@ Job persists in Supabase — user can close tab and return
 | Component | Tool |
 |---|---|
 | Agent framework | CrewAI |
-| LLM primary | Groq — LLaMA 3.1 70B Versatile |
-| LLM fallback | Cerebras — LLaMA 3.1 70B |
-| LLM config | **CrewAI native** (no LangChain) |
+| LLM primary | Groq — LLaMA 3.1 70B Versatile (always streamed) |
+| LLM fallback | Cerebras — LLaMA 3.1 70B (takes over on pre- or mid-stream failure) |
+| LLM config | **CrewAI native + shared `stream_complete` wrapper** (no LangChain) |
+
+Streaming is load-bearing for the "agent brain" UX: partial tokens are written to `agent_logs` as they arrive and pushed to the browser via Supabase Realtime, so the user watches the agent think in real time. Full wrapper behavior (partial-token flushing cadence, pre-stream failover, mid-stream dropout handling) lives in [`INTEGRATIONS.md#llm-providers--groq-primary--cerebras-fallback-streaming`](INTEGRATIONS.md#llm-providers--groq-primary--cerebras-fallback-streaming).
 
 ### External tools
 
