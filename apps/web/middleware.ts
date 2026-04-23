@@ -1,5 +1,7 @@
-import { createServerClient } from "@supabase/ssr";
+import { type CookieOptions, createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
+
+type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 /**
  * Supabase session-refresh middleware. Runs on every request to keep the
@@ -21,7 +23,7 @@ export async function middleware(request: NextRequest) {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: CookieToSet[]) {
         for (const { name, value } of cookiesToSet) {
           request.cookies.set(name, value);
         }

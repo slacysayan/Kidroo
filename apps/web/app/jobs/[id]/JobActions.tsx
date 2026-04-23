@@ -72,10 +72,13 @@ export default function JobActions({
     return data.session?.access_token ?? null;
   }
 
-  async function runScan() {
+  function runScan() {
     startTransition(async () => {
       const t = await token();
-      if (!t) return toast.error("please sign in again");
+      if (!t) {
+        toast.error("please sign in again");
+        return;
+      }
       const res = await callApi(`/jobs/${jobId}/scan`, t);
       if (!res.ok) {
         toast.error(`scan failed (${res.status})`);
@@ -86,12 +89,21 @@ export default function JobActions({
     });
   }
 
-  async function runStart() {
-    if (!selectedChannel) return toast.error("select a channel");
-    if (selectedIds.length === 0) return toast.error("select at least one video");
+  function runStart() {
+    if (!selectedChannel) {
+      toast.error("select a channel");
+      return;
+    }
+    if (selectedIds.length === 0) {
+      toast.error("select at least one video");
+      return;
+    }
     startTransition(async () => {
       const t = await token();
-      if (!t) return toast.error("please sign in again");
+      if (!t) {
+        toast.error("please sign in again");
+        return;
+      }
       const res = await callApi(`/jobs/${jobId}/start`, t, {
         channel_id: selectedChannel,
         video_ids: selectedIds,
