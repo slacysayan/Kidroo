@@ -1,0 +1,59 @@
+# Environment
+.env
+.env.local
+.env.*.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+ENV/
+.uv-cache/
+uv.lock
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+.turbo/
+out/
+coverage/
+*.tsbuildinfo
+.pnpm-store/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Supabase local dev
+supabase/.branches/
+supabase/.temp/
+
+# Runtime artefacts
+/tmp/kidroo/
+*.log
+logs/
+
+# Hatchet local
+.hatchet/
+
+# Secrets (extra paranoia)
+*secret*
+*credential*
+!docs/**/*secret*   # allow docs that explain secrets
+!.env.example
