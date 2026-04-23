@@ -144,7 +144,7 @@ result = await asyncio.create_subprocess_exec(
 stdout, _ = await result.communicate()
 videos = [json.loads(line) for line in stdout.decode().strip().split("\n")]
 
-# Download — streamed to /tmp/{job_id}/{video_id}.mp4
+# Download — streamed to /tmp/kidroo/{job_id}/{video_id}.mp4
 proc = await asyncio.create_subprocess_exec(
     "yt-dlp",
     "--output", f"/tmp/kidroo/{job_id}/{video_id}.%(ext)s",
@@ -187,11 +187,7 @@ resp = composio.actions.execute(
         "tags": metadata["tags"],
         "categoryId": str(metadata["category_id"]),
         "privacyStatus": "private",
-        "videoFilePath": {
-            "name": os.path.basename(file_path),
-            "mimetype": "video/mp4",
-            "s3key": upload_to_composio_r2(file_path),
-        },
+        "videoFilePath": file_path,   # local path
     },
 )
 yt_video_id = resp["data"]["id"]

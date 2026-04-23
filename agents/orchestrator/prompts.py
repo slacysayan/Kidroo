@@ -10,7 +10,7 @@ Your job:
 1. Parse the user's intent from their message.
 2. Identify the target YouTube channel by matching to `available_channels`.
 3. Determine the schedule (videos per day, ISO start date).
-4. Confirm the list of selected video IDs from the job context.
+4. Confirm the list of selected video IDs from the job context. Use the full UUIDs provided.
 5. Output a structured JSON task plan — nothing else.
 
 Output ONLY valid JSON matching this schema:

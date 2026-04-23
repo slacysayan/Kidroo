@@ -194,6 +194,6 @@ fi
 printf "\n%s✓ Bootstrap complete%s  (mode=%s)\n" "$GREEN$BOLD" "$RESET" "$MODE"
 printf "%sNext:%s\n" "$BOLD" "$RESET"
 printf "  1. cp .env.example .env  &&  edit secrets\n"
-printf "  2. supabase db push  (or psql %%SUPABASE_DB_URL%% -f supabase/migrations/001_initial_schema.sql)\n"
+printf "  2. supabase db push  (or psql \$SUPABASE_DB_URL -f supabase/migrations/001_initial_schema.sql)\n"
 printf "  3. composio connections create --toolkit YOUTUBE --user-id <channel_name>\n"
 printf "  4. pnpm dev  (frontend)  +  uv run fastapi dev apps/api/main.py  (backend)\n"
