@@ -1,14 +1,29 @@
-# `apps/api/` — FastAPI backend
+# `apps/api` — Kidroo backend
 
-Python 3.11, FastAPI, deployed to Koyeb free tier.
+FastAPI (Python 3.12+) — stateless REST. Realtime fanout happens via Supabase Realtime, not here.
 
-Endpoints (see `docs/ARCHITECTURE.md`):
-- `POST /jobs`
-- `GET  /jobs/:id`
-- `POST /jobs/:id/select`
-- `POST /channels/connect`
-- `GET  /channels/:id/health`
+## Run
 
-No WebSocket layer — realtime streaming is done via Supabase Realtime directly from the browser.
+```bash
+# From repo root
+uv run fastapi dev apps/api/main.py    # dev server on :8000
 
-Scaffolding lands in Phase 1.
+# Prod (Railway / Fly / Render / any PaaS — same command, driven by Procfile.api)
+uv run uvicorn apps.api.main:app --host 0.0.0.0 --port ${PORT:-8000}
+```
+
+## Endpoints (Phase 1)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/health` | no | Liveness + kill-switch state |
+| GET | `/auth/me` | yes | Echo the authenticated Supabase user |
+| POST | `/jobs` | yes | Enqueue a job on Hatchet _(501 until Phase 3)_ |
+
+## Auth
+
+The client sends `Authorization: Bearer <supabase JWT>`. Phase 5 verifies the signature against `SUPABASE_URL + /auth/v1/.well-known/jwks.json`.
+
+## Config
+
+All env vars are pulled via `agents.lib.config.get_settings()` — typed, cached, validated at startup. Missing keys fail loudly with a Pydantic error.

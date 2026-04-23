@@ -57,7 +57,7 @@ Read this when you are setting up Kidroo for the first time or onboarding a new 
 
 ## Verification
 
-Open http://localhost:3000 and sign in with a magic link. The sidebar should list your one connected channel (`finance_daily`). An empty "No jobs yet" state should render in the chat pane.
+Open http://localhost:3000 and sign in via email + password (or magic link, or Google OAuth — any flow is wired). The sidebar should list your one connected channel (`finance_daily`). An empty "No jobs yet" state should render in the chat pane.
 
 ## Common failures
 
@@ -65,7 +65,7 @@ Open http://localhost:3000 and sign in with a magic link. The sidebar should lis
 |---|---|
 | `uv: command not found` after running SKILLS.sh | `export PATH="$HOME/.local/bin:$PATH"` and re-run |
 | `supabase db push` fails with "project not linked" | `supabase link --project-ref <ref>` then retry |
-| Magic link email never arrives | Check Supabase email provider config; for dev, use `http://localhost:54321/inbucket` |
+| Magic-link or confirmation email never arrives | Check Supabase email provider config; for dev, use `http://localhost:54321/inbucket`. For email+password signups, verify email confirmation is enabled/disabled to match your flow. |
 | Composio OAuth opens a blank page | Check `COMPOSIO_API_KEY` and that the toolkit is enabled in the Composio dashboard |
 
 ## Related files
