@@ -2,6 +2,10 @@
 
 > Agentic YouTube content pipeline — paste a link, agents handle the rest.ok
 
+**🚦 Current phase: `Phase 0 — Foundation` ✅ complete · `Phase 1 — Infra` ← ready to start**
+
+This PR delivers everything Phase 0 calls for: reconciled PRD, architecture, runtime-agent specs, exact integration call signatures, UI spec, phased roadmap, `.env` surface, Supabase schema, in-repo dev-agent skill harness, and an external-skills manifest (`.skills/manifest.json`) installed via `npx skills add`. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full phase list and exit criteria.
+
 Kidroo is a chat-first, agent-native web app that turns a pasted YouTube URL (channel, playlist, or single video) into a fully scheduled upload on one or more of your owned YouTube channels. Five specialized AI agents collaborate in real time — scanning the source, researching context, generating SEO metadata, downloading the asset, and uploading via Composio's OAuth bridge — with every reasoning step, tool call, and status change streaming live into the UI.
 
 **Design principles**
@@ -22,6 +26,7 @@ Kidroo is a chat-first, agent-native web app that turns a pasted YouTube URL (ch
 - [Phased roadmap](#phased-roadmap)
 - [Quick start](#quick-start)
 - [Documentation index](#documentation-index)
+- [Agent skills](#agent-skills)
 - [Risks & open items](#risks--open-items)
 
 ---
@@ -410,7 +415,56 @@ uv run python -m workflows.worker
 | [`docs/UI_SPEC.md`](docs/UI_SPEC.md) | shadcn component inventory + GSAP animation spec |
 | [`docs/TECH_STACK.md`](docs/TECH_STACK.md) | Every library, version, and justification |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phased delivery plan (same content as above, deeper detail) |
-| [`.agents/README.md`](.agents/README.md) | How to use dev-agent skills |
+| [`.agents/README.md`](.agents/README.md) | How to use in-repo dev-agent skills |
+| [`.skills/README.md`](.skills/README.md) | External vendor agent-skills manifest (installed via `npx skills`) |
+
+---
+
+## Agent skills
+
+We split skill knowledge into two trees — both read by any coding agent (Devin, Cursor, Claude Code, Aider, Copilot Workspace) — with a single installer that fronts them.
+
+| Tree | Source | Purpose | Installer |
+|---|---|---|---|
+| [`.agents/skills/`](.agents/skills) | Authored in-house | Repo-specific procedures: setup, testing, Supabase migrations & RLS patterns **for this repo**, Hatchet workflows **for this repo**, security + ToS guardrails, GSAP conventions, frontend conventions | `./SKILLS.sh --skills-only` (registers them) |
+| [`.skills/manifest.json`](.skills/manifest.json) | Vendor-authored on [skills.sh](https://skills.sh) | Canonical "how to use X" procedures from the teams that ship each tool — Supabase, Composio, Firecrawl, shadcn, GSAP, CrewAI, FastAPI, Playwright, etc. | `./SKILLS.sh --skills-install` (uses `npx skills add`) |
+
+The external manifest pins every vendor skill we install. Running `./SKILLS.sh` (no flags) bootstraps the whole environment + both trees in one shot:
+
+```bash
+./SKILLS.sh                     # full bootstrap (deps + both skill trees)
+./SKILLS.sh --skills-install    # only (re)install the external manifest
+./SKILLS.sh --skills-update     # npx skills check && npx skills update
+./SKILLS.sh --skills-find gsap  # discover more skills to add, then edit manifest.json
+```
+
+Adding a new external skill:
+
+1. `./SKILLS.sh --skills-find <query>` — find a skill on skills.sh.
+2. Append a `{ source, skill, why, group }` entry to [`.skills/manifest.json`](.skills/manifest.json).
+3. `./SKILLS.sh --skills-install` — installs every entry idempotently.
+
+### External skills pinned at Phase 0
+
+| Group | Skill | Source |
+|---|---|---|
+| data | `supabase` | `supabase/agent-skills` |
+| data | `supabase-postgres-best-practices` | `supabase/agent-skills` |
+| data | `skill-creator` | `supabase/agent-skills` |
+| integrations | `composio` | `composiohq/skills` |
+| integrations | `firecrawl` | `firecrawl/cli` |
+| integrations | `exa-search` | `benedictking/exa-search` |
+| integrations | `yt-dlp-downloader` | `mapleshaw/yt-dlp-downloader-skill` |
+| ai | `crewai` | `sickn33/antigravity-awesome-skills` |
+| ai | `awesome-free-llm-apis` | `aradotso/trending-skills` (Groq + Cerebras reference) |
+| backend | `fastapi` | `jezweb/claude-skills` |
+| backend | `workflow-orchestration-patterns` | `wshobson/agents` (used for Hatchet designs) |
+| frontend | `vercel-react-best-practices` | `vercel-labs/agent-skills` |
+| frontend | `web-design-guidelines` | `vercel-labs/agent-skills` |
+| frontend | `shadcn` | `shadcn/ui` |
+| frontend | `gsap-timeline` | `greensock/gsap-skills` |
+| testing | `playwright-e2e-testing` | `bobmatnyc/claude-mpm-skills` |
+| testing | `pydantic` | `bobmatnyc/claude-mpm-skills` |
 
 ---
 

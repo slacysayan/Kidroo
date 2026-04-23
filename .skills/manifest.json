@@ -1,0 +1,110 @@
+{
+  "$schema": "https://skills.sh/manifest.schema.json",
+  "registry": "https://skills.sh",
+  "runner": "npx skills add",
+  "description": "Third-party agent skills imported into this repo via `npx skills`. SKILLS.sh reads this file and installs each entry. Managed with `./SKILLS.sh --skills-install`.",
+  "skills": [
+    {
+      "group": "data",
+      "source": "https://github.com/supabase/agent-skills",
+      "skill": "supabase",
+      "why": "Supabase project / client / RLS best practice — used by every DB change."
+    },
+    {
+      "group": "data",
+      "source": "https://github.com/supabase/agent-skills",
+      "skill": "supabase-postgres-best-practices",
+      "why": "Postgres performance + RLS + schema rules. Required reading before any migration."
+    },
+    {
+      "group": "data",
+      "source": "https://github.com/supabase/agent-skills",
+      "skill": "skill-creator",
+      "why": "Canonical SKILL.md authoring guide. Used when we add a new in-repo skill."
+    },
+    {
+      "group": "integrations",
+      "source": "https://github.com/composiohq/skills",
+      "skill": "composio",
+      "why": "Composio CLI + SDK patterns for YouTube OAuth and action execution."
+    },
+    {
+      "group": "integrations",
+      "source": "https://github.com/firecrawl/cli",
+      "skill": "firecrawl",
+      "why": "Firecrawl CLI + research-agent scraping patterns."
+    },
+    {
+      "group": "integrations",
+      "source": "https://github.com/benedictking/exa-search",
+      "skill": "exa-search",
+      "why": "Exa semantic-search patterns used by the research agent."
+    },
+    {
+      "group": "integrations",
+      "source": "https://github.com/mapleshaw/yt-dlp-downloader-skill",
+      "skill": "yt-dlp-downloader",
+      "why": "yt-dlp invocation patterns for scan + download, including YouTube 403 mitigations."
+    },
+    {
+      "group": "ai",
+      "source": "https://github.com/sickn33/antigravity-awesome-skills",
+      "skill": "crewai",
+      "why": "CrewAI multi-agent / role-goal-backstory / process-type conventions."
+    },
+    {
+      "group": "ai",
+      "source": "https://github.com/aradotso/trending-skills",
+      "skill": "awesome-free-llm-apis",
+      "why": "Curated reference for free LLM providers — covers Groq + Cerebras free-tier limits and SDK patterns."
+    },
+    {
+      "group": "backend",
+      "source": "https://github.com/jezweb/claude-skills",
+      "skill": "fastapi",
+      "why": "FastAPI + Pydantic v2 production patterns."
+    },
+    {
+      "group": "backend",
+      "source": "https://github.com/wshobson/agents",
+      "skill": "workflow-orchestration-patterns",
+      "why": "Durable workflow design (saga / entity / fan-out-in). Maps directly to Hatchet workflows in `/workflows`."
+    },
+    {
+      "group": "frontend",
+      "source": "https://github.com/vercel-labs/agent-skills",
+      "skill": "vercel-react-best-practices",
+      "why": "Server/client component boundaries, App Router patterns."
+    },
+    {
+      "group": "frontend",
+      "source": "https://github.com/vercel-labs/agent-skills",
+      "skill": "web-design-guidelines",
+      "why": "Visual hierarchy, spacing, typography — applied to the chat UI."
+    },
+    {
+      "group": "frontend",
+      "source": "https://github.com/shadcn/ui",
+      "skill": "shadcn",
+      "why": "Full component lifecycle via `npx shadcn@latest` + composition/form/style rules."
+    },
+    {
+      "group": "frontend",
+      "source": "https://github.com/greensock/gsap-skills",
+      "skill": "gsap-timeline",
+      "why": "GSAP timeline + stagger + Flip patterns — powers the agent-log choreography."
+    },
+    {
+      "group": "testing",
+      "source": "https://github.com/bobmatnyc/claude-mpm-skills",
+      "skill": "playwright-e2e-testing",
+      "why": "E2E test conventions for `tests/e2e/`."
+    },
+    {
+      "group": "testing",
+      "source": "https://github.com/bobmatnyc/claude-mpm-skills",
+      "skill": "pydantic",
+      "why": "Pydantic v2 validation + schema patterns — shared between FastAPI, CrewAI agents, and Hatchet task inputs."
+    }
+  ]
+}
