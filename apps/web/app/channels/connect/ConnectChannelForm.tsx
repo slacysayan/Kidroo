@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 function slugify(input: string): string {
@@ -55,10 +57,10 @@ export function ConnectChannelForm({ userId }: { userId: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3">
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-muted-foreground">Channel name</span>
-        <input
+    <form onSubmit={submit} className="space-y-4">
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="text-xs font-medium text-muted-foreground">Channel name</span>
+        <Input
           type="text"
           value={name}
           onChange={(e) => {
@@ -67,26 +69,23 @@ export function ConnectChannelForm({ userId }: { userId: string }) {
           }}
           required
           placeholder="e.g. Finance Daily"
-          className="rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-foreground/50"
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-muted-foreground">Composio entity id (alias)</span>
-        <input
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="text-xs font-medium text-muted-foreground">
+          Composio entity id (alias)
+        </span>
+        <Input
           type="text"
           value={entity}
           onChange={(e) => setEntity(slugify(e.target.value))}
           placeholder="finance_daily"
-          className="rounded-md border border-border bg-background px-3 py-2 font-mono outline-none focus:border-foreground/50"
+          className="font-mono"
         />
       </label>
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending} className="w-full">
         {pending ? "creating…" : "Create channel"}
-      </button>
+      </Button>
     </form>
   );
 }
