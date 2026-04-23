@@ -1,12 +1,18 @@
 """Structured logger that writes to both stdout (structlog) and Supabase `agent_logs`.
 
-Every log entry carries `trace_id`, `span_id`, `job_id`, `video_id`, and `agent`
-so we get free OpenTelemetry-style correlation without importing OTel.
+Schema invariants (see supabase/migrations/001_initial_schema.sql):
+    agent_logs.agent    ∈ {orchestrator, research, metadata, download, upload}
+    agent_logs.step     ∈ {status, tool_call, reasoning, fallback, error}
+    agent_logs.message  text
+    agent_logs.metadata jsonb  (level, partial, provider, tool, latency_ms, ...)
+    agent_logs.trace_id / span_id  correlation
 
 Usage:
     async with JobLogger(job_id=..., video_id=..., agent="research") as log:
-        await log.info("Scraping %s", url, step="tool_call", tool="firecrawl")
-        await log.reasoning_delta("partial tokens here...", provider="groq")
+        await log.status("Scanning source URL", tool="yt-dlp")
+        await log.tool_call("firecrawl.scrape_url", latency_ms=420)
+        await log.reasoning_delta("partial tokens...", provider="groq")
+        await log.error("Quota exhausted", exception="RateLimitError")
 """
 from __future__ import annotations
 
@@ -15,12 +21,15 @@ import contextvars
 import uuid
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import structlog
 from supabase import Client, create_client
 
 from agents.lib.config import get_settings
+
+Step = Literal["status", "tool_call", "reasoning", "fallback", "error"]
+Level = Literal["debug", "info", "warning", "error"]
 
 _trace_id_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "trace_id", default=None
@@ -30,7 +39,7 @@ _log = structlog.get_logger(__name__)
 
 
 def _new_id() -> str:
-    return uuid.uuid4().hex
+    return str(uuid.uuid4())
 
 
 def _supabase_server() -> Client:
@@ -44,7 +53,11 @@ def _supabase_server() -> Client:
 
 @dataclass
 class JobLogger:
-    """Async context manager that batches `agent_logs` inserts."""
+    """Async context manager that batches `agent_logs` inserts.
+
+    One logger instance per agent-run. `trace_id` is shared across all
+    emissions from the same agent-run; a fresh `span_id` is issued per row.
+    """
 
     job_id: str
     video_id: str | None
@@ -60,7 +73,7 @@ class JobLogger:
         self._supa = _supabase_server()
         _trace_id_ctx.set(self.trace_id)
         self._flush_task = asyncio.create_task(self._flush_loop())
-        await self.info("agent started", step="lifecycle")
+        await self.status("agent started", lifecycle="start")
         return self
 
     async def __aexit__(
@@ -70,10 +83,14 @@ class JobLogger:
         tb: TracebackType | None,
     ) -> None:
         if exc is not None:
-            await self.error(str(exc), step="lifecycle", exception=exc_type.__name__ if exc_type else None)
+            await self.error(
+                str(exc),
+                exception=exc_type.__name__ if exc_type else None,
+                lifecycle="abort",
+            )
         else:
-            await self.info("agent finished", step="lifecycle")
-        # drain
+            await self.status("agent finished", lifecycle="end")
+        # drain the queue then stop the flusher
         await self._queue.join()
         if self._flush_task:
             self._flush_task.cancel()
@@ -84,14 +101,15 @@ class JobLogger:
 
     # ─── public API ────────────────────────────────────────────────────────
 
-    async def info(self, message: str, **kw: Any) -> None:
-        await self._emit("info", message, **kw)
+    async def status(self, message: str, **meta: Any) -> None:
+        await self._emit("status", "info", message, **meta)
 
-    async def warning(self, message: str, **kw: Any) -> None:
-        await self._emit("warning", message, **kw)
-
-    async def error(self, message: str, **kw: Any) -> None:
-        await self._emit("error", message, **kw)
+    async def tool_call(
+        self, tool: str, *, latency_ms: int | None = None, **meta: Any
+    ) -> None:
+        await self._emit(
+            "tool_call", "info", tool, tool=tool, latency_ms=latency_ms, **meta
+        )
 
     async def reasoning_delta(
         self,
@@ -99,55 +117,92 @@ class JobLogger:
         *,
         provider: str,
         partial: bool = True,
-        **kw: Any,
+        **meta: Any,
     ) -> None:
         """Record a streamed LLM reasoning chunk (partial tokens)."""
         await self._emit(
+            "reasoning",
             "info",
             text,
-            step="reasoning",
-            partial=partial,
             provider=provider,
-            **kw,
+            partial=partial,
+            **meta,
         )
+
+    async def fallback(
+        self,
+        reason: str,
+        *,
+        provider_from: str,
+        provider_to: str,
+        **meta: Any,
+    ) -> None:
+        await self._emit(
+            "fallback",
+            "warning",
+            reason,
+            provider_from=provider_from,
+            provider_to=provider_to,
+            **meta,
+        )
+
+    async def warning(self, message: str, **meta: Any) -> None:
+        # warnings that aren't fallback events are still `status` per schema
+        await self._emit("status", "warning", message, **meta)
+
+    async def info(self, message: str, **meta: Any) -> None:  # convenience alias
+        await self.status(message, **meta)
+
+    async def error(self, message: str, **meta: Any) -> None:
+        await self._emit("error", "error", message, **meta)
 
     # ─── impl ──────────────────────────────────────────────────────────────
 
-    async def _emit(self, level: str, message: str, **kw: Any) -> None:
-        span_id = _new_id()
+    async def _emit(
+        self,
+        step: Step,
+        level: Level,
+        message: str,
+        **meta: Any,
+    ) -> None:
         row: dict[str, Any] = {
             "job_id": self.job_id,
             "video_id": self.video_id,
             "agent": self.agent,
+            "step": step,
+            "message": message[:2000],  # bandwidth cap per schema note
+            "metadata": {
+                "level": level,
+                **{k: v for k, v in meta.items() if v is not None},
+            },
             "trace_id": self.trace_id,
-            "span_id": span_id,
-            "level": level,
-            "message": message,
-            "meta": {k: v for k, v in kw.items() if v is not None},
+            "span_id": _new_id(),
         }
-        # stdout (structured)
-        _log.log(
-            getattr(_log, level, _log.info).__name__ if False else level,
-            message,
-            **{k: v for k, v in row.items() if k not in {"message"}},
+        _log.info(
+            "agent.emit",
+            agent=self.agent,
+            step=step,
+            level=level,
+            job_id=self.job_id,
+            video_id=self.video_id,
+            message=message,
         )
         await self._queue.put(row)
 
     async def _flush_loop(self) -> None:
         """Batch-insert rows into `agent_logs` in the background."""
         assert self._supa is not None
+        supa = self._supa
         while True:
             rows: list[dict[str, Any]] = [await self._queue.get()]
-            # opportunistically drain the queue for a micro-batch
             try:
                 while not self._queue.empty() and len(rows) < 64:
                     rows.append(self._queue.get_nowait())
             except asyncio.QueueEmpty:
                 pass
             try:
-                # supabase-py is sync — run in executor to stay non-blocking
                 await asyncio.to_thread(
-                    lambda: self._supa.table("agent_logs").insert(rows).execute()  # type: ignore[union-attr]
+                    lambda batch=rows: supa.table("agent_logs").insert(batch).execute()
                 )
             except Exception as e:
                 _log.error("agent_logs.insert failed", error=str(e), n=len(rows))

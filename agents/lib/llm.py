@@ -173,9 +173,8 @@ async def stream_complete(
             await _flush()
     except Exception as groq_err:
         is_prestream = not generated
-        await logger.warning(
-            f"Groq stream failed ({type(groq_err).__name__}), failing over to Cerebras",
-            step="llm_failover",
+        await logger.fallback(
+            f"Groq stream failed ({type(groq_err).__name__}); failing over to Cerebras",
             provider_from="groq",
             provider_to="cerebras",
             prestream=is_prestream,
@@ -203,7 +202,6 @@ async def stream_complete(
         except Exception as cerebras_err:
             await logger.error(
                 "Both Groq and Cerebras failed",
-                step="llm_unavailable",
                 groq_error=str(groq_err),
                 cerebras_error=str(cerebras_err),
             )
@@ -214,10 +212,8 @@ async def stream_complete(
     # final flush
     await _flush(force=True)
     latency_ms = int((time.monotonic() - start) * 1000)
-    await logger.info(
+    await logger.status(
         "LLM stream complete",
-        step="reasoning",
-        partial=False,
         provider=provider,
         tokens=token_count,
         latency_ms=latency_ms,

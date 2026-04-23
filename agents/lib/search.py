@@ -43,6 +43,34 @@ class ScrapeResult:
 
 # ─── Tavily ──────────────────────────────────────────────────────────────
 
+
+async def _tavily_call(
+    *,
+    key: str,
+    query: str,
+    max_results: int = 5,
+    search_depth: str = "basic",
+) -> list[SearchResult]:
+    """Single Tavily request with a specific API key.
+
+    Separate from `search_web` so tests can monkey-patch the seam cleanly.
+    """
+    client = AsyncTavilyClient(api_key=key)
+    resp = await client.search(
+        query=query, max_results=max_results, search_depth=search_depth
+    )
+    return [
+        SearchResult(
+            title=r.get("title", ""),
+            url=r.get("url", ""),
+            snippet=r.get("content", ""),
+            score=r.get("score"),
+            source="tavily",
+        )
+        for r in resp.get("results", [])
+    ]
+
+
 async def search_web(
     query: str,
     *,
@@ -70,27 +98,16 @@ async def search_web(
         else None
     )
 
+    keys = [primary] + ([fallback] if fallback else [])
     last_err: Exception | None = None
-    for idx, key in enumerate([primary, fallback]):
-        if key is None:
-            continue
+    for idx, key in enumerate(keys):
         try:
-            client = AsyncTavilyClient(api_key=key)
-            resp = await client.search(
+            results = await _tavily_call(
+                key=key,
                 query=query,
                 max_results=max_results,
                 search_depth=search_depth,
             )
-            results = [
-                SearchResult(
-                    title=r.get("title", ""),
-                    url=r.get("url", ""),
-                    snippet=r.get("content", ""),
-                    score=r.get("score"),
-                    source="tavily",
-                )
-                for r in resp.get("results", [])
-            ]
             if idx > 0:
                 _log.info("tavily.fallback_key_used", query=query)
             return results
@@ -100,7 +117,7 @@ async def search_web(
                 "tavily.search_failed",
                 key_index=idx,
                 error=str(e),
-                will_failover=(idx == 0 and fallback is not None),
+                will_failover=idx + 1 < len(keys),
             )
             continue
         except Exception as e:  # pragma: no cover — SDK-specific
@@ -108,10 +125,11 @@ async def search_web(
             _log.warning("tavily.unexpected_error", key_index=idx, error=str(e))
             continue
 
-    raise RuntimeError(f"Tavily exhausted (both keys failed): {last_err!r}")
+    raise RuntimeError(f"Tavily exhausted (all keys failed): {last_err!r}")
 
 
 # ─── Firecrawl ───────────────────────────────────────────────────────────
+
 
 async def deep_scrape(url: str) -> ScrapeResult:
     """Scrape a single URL into clean markdown via Firecrawl."""
@@ -128,6 +146,7 @@ async def deep_scrape(url: str) -> ScrapeResult:
 
 
 # ─── Exa ─────────────────────────────────────────────────────────────────
+
 
 async def semantic_search(query: str, *, num_results: int = 5) -> list[SearchResult]:
     """Semantic (neural) search via Exa — for niche keyword / intent discovery."""

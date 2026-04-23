@@ -2,7 +2,16 @@
 
 ## Visual language
 
-- **Typography:** Geist Sans for body, Geist Mono for agent-log text and code.
+- **Typography:** Geist Sans for body, Geist Mono for agent-log text and code. Loaded via `next/font/google` in `apps/web/app/layout.tsx`:
+
+  ```ts
+  import { Geist, Geist_Mono } from "next/font/google";
+
+  const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"], display: "swap" });
+  const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], display: "swap" });
+  ```
+
+  The CSS variables `--font-geist-sans` / `--font-geist-mono` are wired into Tailwind v4 `@theme` in `apps/web/app/globals.css` and become the default `font-sans` / `font-mono`. No other font system is used anywhere in the app.
 - **Color:** shadcn default neutral palette. Agent color tokens (pill backgrounds) are defined once in `apps/web/styles/tokens.css` and used everywhere.
 - **Spacing:** 4 px base grid. All paddings/margins are `p-{n}` / `m-{n}` Tailwind tokens.
 - **Radius:** `rounded-md` (6 px) default. `rounded-lg` (8 px) for cards. Never `rounded-full` except avatars and badges.
@@ -161,3 +170,14 @@ All GSAP primitives are wrapped in `apps/web/lib/gsap.ts` which lazy-loads GSAP 
 - All animations honor `prefers-reduced-motion` — GSAP wrapper checks the media query and sets `duration: 0` when reduced.
 - Agent-log screen-reader announcements are throttled (aria-live="polite", rate-limited to 1/s via a queue).
 - Color is never the sole carrier of meaning (status badges always include an icon).
+
+## Live components shipped in Phase 1 / 2
+
+| Component | File | Purpose |
+|---|---|---|
+| `Header` | `apps/web/components/Header.tsx` | Brand + email + sign-out |
+| `SignOutButton` | `apps/web/components/SignOutButton.tsx` | Calls `supabase.auth.signOut()` and redirects to `/login` |
+| `JobComposer` | `apps/web/components/JobComposer.tsx` | Paste-a-link form; inserts `jobs` row via RLS and navigates to `/jobs/[id]` |
+| `AgentLogTimeline` | `apps/web/components/AgentLogTimeline.tsx` | Supabase-Realtime subscription to `agent_logs`, GSAP entrance per row |
+| `JobActions` | `apps/web/app/jobs/[id]/JobActions.tsx` | Scan / select / schedule / start controls; calls FastAPI `/jobs/{id}/scan` + `/start` |
+| `ConnectChannelForm` | `apps/web/app/channels/connect/ConnectChannelForm.tsx` | Creates a `channels` row with a Composio entity alias |

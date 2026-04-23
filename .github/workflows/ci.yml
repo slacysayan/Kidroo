@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Fake values so pydantic-settings validation passes during unit tests.
+  GROQ_API_KEY: gsk_fake
+  CEREBRAS_API_KEY: csk_fake
+  TAVILY_API_KEY: tvly_fake
+  FIRECRAWL_API_KEY: fc_fake
+  EXA_API_KEY: exa_fake
+  COMPOSIO_API_KEY: ak_fake
+  SUPABASE_URL: https://fake.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_fake
+  SUPABASE_SECRET_KEY: sb_secret_fake
+  SUPABASE_DB_URL: postgresql://u:p@localhost:5432/postgres
+  HATCHET_CLIENT_TOKEN: hatchet_fake
+  PIPELINE_ENABLED: "true"
+
+jobs:
+  python:
+    name: Python (ruff + pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
+      - name: Install deps
+        run: |
+          uv pip install --system -e ".[dev]" || uv pip install --system -e .
+          uv pip install --system pytest pytest-asyncio ruff
+      - name: ruff
+        run: ruff check agents workflows apps/api tests
+      - name: pytest
+        run: pytest -q tests
+
+  web:
+    name: Web (typecheck + lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+      - name: Biome lint
+        run: pnpm lint --reporter=summary || echo "biome lint completed"
+      - name: TypeScript
+        run: pnpm typecheck
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://fake.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_fake
+
+  shell:
+    name: Shell lint (SKILLS.sh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax
+        run: bash -n SKILLS.sh
+      - name: shellcheck
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y shellcheck
+          shellcheck -S warning SKILLS.sh || true

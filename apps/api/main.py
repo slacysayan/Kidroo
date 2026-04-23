@@ -2,25 +2,30 @@
 
 Stateless REST API — realtime fanout happens via Supabase Realtime, not here.
 
-Endpoints (Phase 1):
-  GET  /health                       — liveness
+Endpoints:
+  GET  /health                       — liveness + kill-switch state
   GET  /auth/me                      — echo the authenticated user (Supabase JWT)
-  POST /jobs                         — enqueue a new job on Hatchet
-  GET  /jobs/{job_id}                — job status (server-side Supabase read)
-
-Phase 2 adds /agents/* introspection endpoints.
+  POST /jobs                         — create a job row and enqueue on Hatchet
+  GET  /jobs/{job_id}                — return the job row + its videos
+  POST /jobs/{job_id}/scan           — yt-dlp scan; writes detected videos
+  POST /jobs/{job_id}/start          — kick off the Hatchet batch workflow
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from supabase import Client, create_client
 
+from agents.download.skills.ytdlp import scan as ytdlp_scan
 from agents.lib.config import get_settings
+from agents.lib.supabase import get_service_client
 
 _log = structlog.get_logger(__name__)
 
@@ -40,13 +45,13 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 app = FastAPI(
     title="Kidroo API",
     description="Agentic YouTube content pipeline — stateless REST surface.",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in Phase 5 to the deployed frontend origin
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,19 +60,34 @@ app.add_middleware(
 
 # ─── dependencies ────────────────────────────────────────────────────────
 
-async def current_user(request: Request) -> dict[str, Any]:
-    """Extract + verify the Supabase JWT from the Authorization header.
 
-    Phase 1 stub: accepts `Authorization: Bearer <supabase jwt>` but does not
-    yet verify the signature. Phase 5 wires up real verification against the
-    Supabase JWKS endpoint.
+def _anon_client() -> Client:
+    settings = get_settings()
+    return create_client(
+        settings.supabase_url, settings.supabase_client_key.get_secret_value()
+    )
+
+
+async def current_user(request: Request) -> dict[str, Any]:
+    """Verify the Supabase access token and return its payload.
+
+    We delegate signature verification to Supabase's own `auth.getUser()`
+    endpoint rather than re-implementing JWKS — it's one RPC and saves us from
+    key-rotation bugs.
     """
     auth = request.headers.get("authorization", "")
     if not auth.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing bearer token")
     token = auth.split(" ", 1)[1]
-    # TODO(phase-5): verify against SUPABASE_URL + /auth/v1/.well-known/jwks.json
-    return {"token": token}
+
+    def _verify() -> dict[str, Any]:
+        client = _anon_client()
+        resp = client.auth.get_user(token)
+        if resp is None or resp.user is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
+        return {"id": resp.user.id, "email": resp.user.email, "token": token}
+
+    return await asyncio.to_thread(_verify)
 
 
 # ─── routes ──────────────────────────────────────────────────────────────
@@ -76,6 +96,7 @@ async def current_user(request: Request) -> dict[str, Any]:
 class HealthResponse(BaseModel):
     status: str = "ok"
     pipeline_enabled: bool
+    version: str = "0.2.0"
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -85,38 +106,236 @@ async def health() -> HealthResponse:
 
 @app.get("/auth/me")
 async def me(user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
-    return {"authenticated": True, **user}
+    return {"authenticated": True, "id": user["id"], "email": user["email"]}
+
+
+# ─── jobs ────────────────────────────────────────────────────────────────
 
 
 class CreateJobRequest(BaseModel):
     source_url: str = Field(description="YouTube channel, playlist, or video URL")
-    target_channels: list[str] = Field(
-        description="Composio entity IDs the output should be published to",
-        min_length=1,
-    )
-    selected_video_ids: list[str] | None = Field(
-        default=None,
-        description="Subset of source videos; None = ask the user",
-    )
 
 
 class CreateJobResponse(BaseModel):
     job_id: str
-    status: str = "enqueued"
+    status: str
 
 
-@app.post("/jobs", response_model=CreateJobResponse, status_code=status.HTTP_202_ACCEPTED)
+@app.post(
+    "/jobs",
+    response_model=CreateJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_job(
     req: CreateJobRequest,
     user: dict[str, Any] = Depends(current_user),
 ) -> CreateJobResponse:
-    """Enqueue a new video-pipeline job on Hatchet. (Full wiring in Phase 3.)"""
     if not get_settings().pipeline_enabled:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "pipeline kill-switch is engaged"
         )
-    # TODO(phase-3): await hatchet.admin.run_workflow("process_video_batch", req)
-    raise HTTPException(
-        status.HTTP_501_NOT_IMPLEMENTED,
-        "job dispatch lands in Phase 3 (docs/ROADMAP.md)",
-    )
+
+    def _insert() -> dict[str, Any]:
+        supa = get_service_client()
+        resp = (
+            supa.table("jobs")
+            .insert(
+                {
+                    "user_id": user["id"],
+                    "source_url": req.source_url,
+                    "status": "pending",
+                }
+            )
+            .execute()
+        )
+        row = (resp.data or [{}])[0]
+        return row
+
+    row = await asyncio.to_thread(_insert)
+    return CreateJobResponse(job_id=row["id"], status=row["status"])
+
+
+@app.get("/jobs/{job_id}")
+async def get_job(
+    job_id: str, user: dict[str, Any] = Depends(current_user)
+) -> dict[str, Any]:
+    def _q() -> dict[str, Any]:
+        supa = get_service_client()
+        job = (
+            supa.table("jobs")
+            .select("*")
+            .eq("id", job_id)
+            .eq("user_id", user["id"])
+            .limit(1)
+            .execute()
+        )
+        if not job.data:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+        videos = (
+            supa.table("videos").select("*").eq("job_id", job_id).execute()
+        )
+        return {"job": job.data[0], "videos": videos.data or []}
+
+    return await asyncio.to_thread(_q)
+
+
+@app.post("/jobs/{job_id}/scan")
+async def scan_job(
+    job_id: str, user: dict[str, Any] = Depends(current_user)
+) -> dict[str, Any]:
+    """Run yt-dlp scan on the job's source_url and persist detected videos."""
+
+    def _load() -> dict[str, Any]:
+        supa = get_service_client()
+        resp = (
+            supa.table("jobs")
+            .select("id, source_url, user_id, status")
+            .eq("id", job_id)
+            .eq("user_id", user["id"])
+            .limit(1)
+            .execute()
+        )
+        if not resp.data:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+        return resp.data[0]
+
+    job = await asyncio.to_thread(_load)
+
+    videos = await ytdlp_scan(job["source_url"])
+
+    def _persist() -> None:
+        supa = get_service_client()
+        rows = [
+            {
+                "job_id": job_id,
+                "source_video_id": v.source_video_id,
+                "source_url": v.url or job["source_url"],
+                "title": v.title,
+                "duration_secs": v.duration_secs,
+                "status": "queued",
+            }
+            for v in videos
+        ]
+        if rows:
+            supa.table("videos").insert(rows).execute()
+        supa.table("jobs").update({"status": "awaiting_selection"}).eq(
+            "id", job_id
+        ).execute()
+
+    await asyncio.to_thread(_persist)
+    return {"job_id": job_id, "detected": len(videos)}
+
+
+class StartJobRequest(BaseModel):
+    channel_id: str
+    video_ids: list[str] = Field(min_length=1)
+    per_day: int = Field(1, ge=1, le=6)
+    start_date: datetime
+
+
+class StartJobResponse(BaseModel):
+    job_id: str
+    workflow_run_id: str | None = None
+    status: str = "running"
+
+
+@app.post("/jobs/{job_id}/start", response_model=StartJobResponse)
+async def start_job(
+    job_id: str,
+    req: StartJobRequest,
+    user: dict[str, Any] = Depends(current_user),
+) -> StartJobResponse:
+    if not get_settings().pipeline_enabled:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "pipeline kill-switch is engaged"
+        )
+
+    def _load() -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        supa = get_service_client()
+        job = (
+            supa.table("jobs")
+            .select("*")
+            .eq("id", job_id)
+            .eq("user_id", user["id"])
+            .limit(1)
+            .execute()
+        )
+        if not job.data:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+        channel = (
+            supa.table("channels")
+            .select("id, composio_entity_id, name")
+            .eq("id", req.channel_id)
+            .eq("user_id", user["id"])
+            .limit(1)
+            .execute()
+        )
+        if not channel.data:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "channel not found")
+        vids = (
+            supa.table("videos")
+            .select("*")
+            .in_("id", req.video_ids)
+            .eq("job_id", job_id)
+            .execute()
+        )
+        return (
+            {"job": job.data[0], "channel": channel.data[0]},
+            vids.data or [],
+        )
+
+    meta, vids = await asyncio.to_thread(_load)
+
+    # Build the batch input for Hatchet.
+    batch = {
+        "job_id": job_id,
+        "channel_id": meta["channel"]["id"],
+        "channel_entity_id": meta["channel"]["composio_entity_id"],
+        "schedule_per_day": req.per_day,
+        "schedule_start": req.start_date.astimezone(timezone.utc).isoformat(),
+        "videos": [
+            {
+                "video_id": v["id"],
+                "source_url": v["source_url"],
+                "source_video_id": v["source_video_id"],
+                "video_title": v.get("title") or "",
+                "video_description": v.get("description") or "",
+                "duration_secs": v.get("duration_secs") or 0,
+            }
+            for v in vids
+        ],
+    }
+
+    # Enqueue on Hatchet. We lazily import to avoid hard-requiring Hatchet
+    # connectivity for `/health` + `/auth/me`.
+    from workflows.hatchet import hatchet
+
+    def _enqueue() -> str:
+        ref = hatchet.admin.run_workflow("process_video_batch", batch)
+        return str(ref.workflow_run_id)
+
+    try:
+        run_id = await asyncio.to_thread(_enqueue)
+    except Exception as e:
+        _log.error("hatchet.enqueue_failed", error=str(e))
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"hatchet enqueue failed: {e}"
+        ) from e
+
+    def _mark() -> None:
+        supa = get_service_client()
+        supa.table("jobs").update(
+            {
+                "status": "running",
+                "channel_id": meta["channel"]["id"],
+                "schedule": {
+                    "per_day": req.per_day,
+                    "start_date": req.start_date.date().isoformat(),
+                    "timezone": "UTC",
+                },
+            }
+        ).eq("id", job_id).execute()
+
+    await asyncio.to_thread(_mark)
+
+    return StartJobResponse(job_id=job_id, workflow_run_id=run_id, status="running")
