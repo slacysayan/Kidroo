@@ -2,16 +2,20 @@
 # SKILLS.sh — bootstrap installer for Kidroo.
 #
 # Installs all system-level dependencies, language toolchains, and package
-# managers required by the repo, then registers the dev-agent skill tree
-# under .agents/skills/ so any coding agent (Devin, Cursor, Claude Code,
-# Aider, Copilot Workspace) can discover and consume them.
+# managers required by the repo, then:
+#   (1) registers the in-repo dev-agent skill tree under `.agents/skills/`
+#   (2) installs the external vendor-authored skills pinned in `.skills/manifest.json`
+#       via `npx skills add` (https://skills.sh)
 #
 # Idempotent: safe to re-run. Each step is skipped if already satisfied.
 #
 # Usage:
-#   ./SKILLS.sh                 # full install
-#   ./SKILLS.sh --doctor        # verify an existing install
-#   ./SKILLS.sh --skills-only   # only (re)register .agents skills, skip deps
+#   ./SKILLS.sh                      # full install (deps + both skill trees)
+#   ./SKILLS.sh --doctor             # verify an existing install, no changes
+#   ./SKILLS.sh --skills-only        # skip system deps, just register both skill trees
+#   ./SKILLS.sh --skills-install     # install only the `.skills/manifest.json` entries
+#   ./SKILLS.sh --skills-update      # run `npx skills check && npx skills update`
+#   ./SKILLS.sh --skills-find <q>    # search skills.sh for skills to add
 
 set -euo pipefail
 
@@ -19,23 +23,116 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
 MODE="install"
-for arg in "$@"; do
-  case "$arg" in
-    --doctor)      MODE="doctor"      ;;
-    --skills-only) MODE="skills-only" ;;
-    -h|--help)
-      sed -n '2,20p' "$0"; exit 0 ;;
+FIND_QUERY=""
+while (( $# )); do
+  case "$1" in
+    --doctor)         MODE="doctor"         ;;
+    --skills-only)    MODE="skills-only"    ;;
+    --skills-install) MODE="skills-install" ;;
+    --skills-update)  MODE="skills-update"  ;;
+    --skills-find)    MODE="skills-find"; shift; FIND_QUERY="${1:-}" ;;
+    -h|--help)        sed -n '2,20p' "$0"; exit 0 ;;
+    *)                printf "Unknown flag: %s\n" "$1" >&2; exit 2 ;;
   esac
+  shift
 done
 
 # ─── styling ──────────────────────────────────────────────────────────────
 BOLD="$(printf '\033[1m')"; DIM="$(printf '\033[2m')"; RESET="$(printf '\033[0m')"
 GREEN="$(printf '\033[32m')"; YELLOW="$(printf '\033[33m')"; RED="$(printf '\033[31m')"
+CYAN="$(printf '\033[36m')"
 step()    { printf "%s▶%s %s\n" "$BOLD" "$RESET" "$*"; }
 ok()      { printf "  %s✓%s %s\n" "$GREEN" "$RESET" "$*"; }
 warn()    { printf "  %s!%s %s\n" "$YELLOW" "$RESET" "$*"; }
+info()    { printf "  %s·%s %s\n" "$CYAN" "$RESET" "$*"; }
 fail()    { printf "  %s✗%s %s\n" "$RED" "$RESET" "$*"; exit 1; }
 have()    { command -v "$1" >/dev/null 2>&1; }
+
+# ─── helpers ──────────────────────────────────────────────────────────────
+
+# Ensure we have a node/npx binary; if not, try to enable one from fnm.
+ensure_npx() {
+  if ! have npx; then
+    if [[ -d "$HOME/.local/share/fnm" ]]; then
+      export PATH="$HOME/.local/share/fnm:$PATH"
+      eval "$(fnm env --use-on-cd 2>/dev/null || true)"
+    fi
+  fi
+  have npx || fail "npx not found — install Node 20 first (run ./SKILLS.sh without flags)"
+}
+
+# Install every entry in .skills/manifest.json via `npx skills add`.
+install_manifest_skills() {
+  ensure_npx
+  local manifest="$ROOT/.skills/manifest.json"
+  [[ -f "$manifest" ]] || { warn ".skills/manifest.json missing — nothing to install"; return 0; }
+
+  if ! have jq; then
+    if have apt-get; then sudo apt-get install -y --no-install-recommends jq
+    elif have brew;    then brew install jq
+    else warn "jq not found and cannot be auto-installed; install it and re-run"; return 1
+    fi
+  fi
+
+  local count=0
+  local failed=0
+  while IFS=$'\t' read -r source skill group why; do
+    [[ -z "$skill" || -z "$source" ]] && continue
+    count=$((count+1))
+    info "[$group] $skill  —  $why"
+    if npx --yes skills add "$source" --skill "$skill" >/tmp/skills-install.log 2>&1; then
+      ok "installed: $skill"
+    else
+      warn "failed to install $skill (source=$source). Log: /tmp/skills-install.log"
+      failed=$((failed+1))
+    fi
+  done < <(jq -r '.skills[] | [.source, .skill, .group, .why] | @tsv' "$manifest")
+
+  if (( failed == 0 )); then
+    ok "all $count manifest skills installed"
+  else
+    warn "$failed / $count skills failed — check /tmp/skills-install.log"
+  fi
+}
+
+update_manifest_skills() {
+  ensure_npx
+  step "Checking for skill updates"
+  npx --yes skills check || true
+  step "Updating skills"
+  npx --yes skills update || true
+  ok "skills updated (where available)"
+}
+
+find_skills() {
+  ensure_npx
+  [[ -n "$FIND_QUERY" ]] || fail "pass a query, e.g. ./SKILLS.sh --skills-find supabase"
+  step "Searching skills.sh for: $FIND_QUERY"
+  npx --yes skills find "$FIND_QUERY"
+}
+
+register_local_skills() {
+  step "Registering in-repo dev-agent skills (.agents/skills/)"
+  if [[ -d .agents/skills ]]; then
+    local count=0
+    while IFS= read -r f; do
+      ok "skill: $(dirname "$f" | sed 's|^\.agents/skills/||')"
+      count=$((count+1))
+    done < <(find .agents/skills -name SKILL.md -type f | sort)
+    [[ $count -eq 0 ]] && warn "no SKILL.md files found"
+  else
+    warn ".agents/skills/ not present"
+  fi
+}
+
+# ─── mode short-circuits ──────────────────────────────────────────────────
+
+case "$MODE" in
+  skills-install) install_manifest_skills; exit 0 ;;
+  skills-update)  update_manifest_skills;  exit 0 ;;
+  skills-find)    find_skills;             exit 0 ;;
+  skills-only)    register_local_skills; install_manifest_skills; exit 0 ;;
+esac
 
 # ─── preflight ────────────────────────────────────────────────────────────
 step "Preflight"
@@ -46,27 +143,17 @@ case "$OS" in
   *) fail "Unsupported OS: $OS" ;;
 esac
 
-# ─── skills-only shortcut ────────────────────────────────────────────────
-if [[ "$MODE" == "skills-only" ]]; then
-  step "Registering dev-agent skills"
-  find .agents/skills -name SKILL.md -type f | while read -r f; do
-    ok "skill: $(dirname "$f" | sed 's|^\.agents/skills/||')"
-  done
-  exit 0
-fi
-
 # ─── system deps ──────────────────────────────────────────────────────────
 step "System dependencies"
-
 if [[ "$OS" == "Linux" ]] && have apt-get; then
   if [[ "$MODE" == "install" ]]; then
     sudo apt-get update -qq
     sudo apt-get install -y --no-install-recommends \
-      git curl ca-certificates build-essential \
+      git curl ca-certificates build-essential jq \
       ffmpeg python3 python3-venv python3-pip
     ok "apt packages installed"
   else
-    for p in git curl ffmpeg python3; do
+    for p in git curl ffmpeg python3 jq; do
       have "$p" && ok "$p" || warn "$p missing"
     done
   fi
@@ -95,7 +182,7 @@ if have uv; then
   fi
 fi
 
-# ─── Node.js via fnm (fast, deterministic) ───────────────────────────────
+# ─── Node.js via fnm ──────────────────────────────────────────────────────
 step "Node.js 20 + pnpm"
 if ! have node; then
   [[ "$MODE" == "doctor" ]] && warn "node missing" || {
@@ -111,10 +198,7 @@ else
 fi
 
 if ! have pnpm; then
-  [[ "$MODE" == "doctor" ]] && warn "pnpm missing" || {
-    npm install -g pnpm@latest
-    ok "pnpm $(pnpm -v)"
-  }
+  [[ "$MODE" == "doctor" ]] && warn "pnpm missing" || { npm install -g pnpm@latest; ok "pnpm $(pnpm -v)"; }
 else
   ok "pnpm $(pnpm -v)"
 fi
@@ -124,7 +208,7 @@ if [[ -f package.json && "$MODE" == "install" ]]; then
   ok "pnpm install"
 fi
 
-# ─── yt-dlp (runtime dependency — used by download agent) ────────────────
+# ─── yt-dlp ───────────────────────────────────────────────────────────────
 step "yt-dlp"
 if ! have yt-dlp; then
   [[ "$MODE" == "doctor" ]] && warn "yt-dlp missing" || {
@@ -135,7 +219,7 @@ else
   ok "yt-dlp $(yt-dlp --version 2>/dev/null)"
 fi
 
-# ─── Composio CLI (optional but recommended for OAuth setup) ─────────────
+# ─── Composio CLI ────────────────────────────────────────────────────────
 step "Composio CLI"
 if ! have composio; then
   [[ "$MODE" == "doctor" ]] && warn "composio CLI missing (ok — SDK is sufficient)" || {
@@ -146,7 +230,7 @@ else
   ok "composio $(composio --version 2>/dev/null | head -1)"
 fi
 
-# ─── Supabase CLI (optional) ─────────────────────────────────────────────
+# ─── Supabase CLI ────────────────────────────────────────────────────────
 step "Supabase CLI"
 if ! have supabase; then
   [[ "$MODE" == "doctor" ]] && warn "supabase CLI missing (ok — migrations can be applied via psql)" || {
@@ -169,17 +253,15 @@ else
   warn ".pre-commit-config.yaml not present yet — will be added in a later phase"
 fi
 
-# ─── register dev-agent skills ───────────────────────────────────────────
-step "Registering dev-agent skills (.agents/skills/)"
-if [[ -d .agents/skills ]]; then
-  count=0
-  while IFS= read -r f; do
-    ok "skill: $(dirname "$f" | sed 's|^\.agents/skills/||')"
-    count=$((count+1))
-  done < <(find .agents/skills -name SKILL.md -type f | sort)
-  [[ $count -eq 0 ]] && warn "no SKILL.md files found"
+# ─── register in-repo skills ──────────────────────────────────────────────
+register_local_skills
+
+# ─── install external vendor skills (skills.sh) ───────────────────────────
+step "Installing external agent skills (.skills/manifest.json via npx skills)"
+if [[ "$MODE" == "doctor" ]]; then
+  [[ -f .skills/manifest.json ]] && ok ".skills/manifest.json present" || warn ".skills/manifest.json missing"
 else
-  warn ".agents/skills/ not present"
+  install_manifest_skills || warn "external skills install had errors — continue bootstrap"
 fi
 
 # ─── .env check ───────────────────────────────────────────────────────────
@@ -197,3 +279,7 @@ printf "  1. cp .env.example .env  &&  edit secrets\n"
 printf "  2. supabase db push  (or psql \$SUPABASE_DB_URL -f supabase/migrations/001_initial_schema.sql)\n"
 printf "  3. composio connections create --toolkit YOUTUBE --user-id <channel_name>\n"
 printf "  4. pnpm dev  (frontend)  +  uv run fastapi dev apps/api/main.py  (backend)\n"
+printf "  %sTip:%s  add a skill later with:\n" "$DIM" "$RESET"
+printf "         ./SKILLS.sh --skills-find <query>\n"
+printf "         # then append the {source, skill, why, group} tuple to .skills/manifest.json\n"
+printf "         ./SKILLS.sh --skills-install\n"

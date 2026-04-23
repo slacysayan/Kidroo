@@ -19,7 +19,7 @@
                 │ HTTPS (REST)                                 │ WSS (Realtime)
                 ▼                                              ▼
 ┌──────────────────────────────────┐          ┌──────────────────────────────────┐
-│     FastAPI @ Koyeb (free)       │          │  Supabase Realtime (WSS)         │
+│     FastAPI @ Railway (Hobby)    │          │  Supabase Realtime (WSS)         │
 │                                  │          │  - Broadcasts agent_logs INSERT   │
 │  POST /jobs                      │          │  - Broadcasts jobs UPDATE         │
 │  GET  /jobs/:id                  │          │  - Broadcasts videos UPDATE       │
@@ -34,7 +34,7 @@
           ▼                                                     │
 ┌──────────────────────────────────────────────┐                │
 │  Hatchet control plane                       │                │
-│  (Hatchet Cloud free OR self-host on Koyeb)  │                │
+│  (Hatchet Cloud free; self-host on Railway   │                │
 │                                              │                │
 │  - Durable workflow engine                   │                │
 │  - Postgres-backed checkpoints               │                │
@@ -43,7 +43,7 @@
           │ dispatches tasks                                    │
           ▼                                                     │
 ┌────────────────────────────────────────────────────────────┐  │
-│  Hatchet worker (Python process on Koyeb)                  │  │
+│  Hatchet worker (Python process on Railway)                │  │
 │                                                            │  │
 │  workflows/video_pipeline.py                               │  │
 │     └── process_video_batch                                │  │
@@ -82,7 +82,7 @@
 
 ┌──────────────────── Supabase Postgres (free tier) ────────────────────┐
 │  Tables:                                                              │
-│    auth.users            (Supabase Auth — magic link)                 │
+│    auth.users            (Supabase Auth — email+pw / magic / OAuth)   │
 │    public.channels       (Composio entity IDs, per user)              │
 │    public.jobs           (one row per user submission)                │
 │    public.videos         (one row per selected video)                 │
@@ -117,7 +117,7 @@
 | yt-dlp | Non-zero exit | Retry once with `--no-check-certificate`; else mark `failed`. |
 | Composio upload | Error or ghost upload | Compensating delete + retry up to 3×; then `failed`. |
 | Supabase | Realtime disconnect | JS client auto-reconnects; logs are backfilled on reconnect. |
-| Koyeb | Container restart | Hatchet resumes; FastAPI is stateless. |
+| Railway (API or worker) | Container restart | Hatchet resumes from the last checkpoint; FastAPI is stateless; env vars are re-injected by Railway on boot. |
 | User | Closes tab | Realtime subscription re-established on next load; state is server-side. |
 
 ## Why `agents/` (runtime) vs `.agents/` (dev harness)

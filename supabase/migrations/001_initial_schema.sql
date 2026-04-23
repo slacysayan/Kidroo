@@ -89,7 +89,7 @@ create table if not exists public.agent_logs (
     agent      text        not null
                check (agent in ('orchestrator','research','metadata','download','upload')),
     step       text        not null
-               check (step in ('status','tool_call','reasoning','fallback','error','progress')),
+               check (step in ('status','tool_call','reasoning','fallback','error')),
     message    text        not null,
     metadata   jsonb       not null default '{}'::jsonb,            -- {tool, latency_ms, retry, cache_hit, ...}
     trace_id   uuid,
@@ -181,14 +181,8 @@ create policy agent_logs_owner_select on public.agent_logs
         exists (select 1 from public.jobs j where j.id = agent_logs.job_id and j.user_id = auth.uid())
     );
 
--- firecrawl_cache: service-role only (no user policies — RLS blocks anon)
+-- firecrawl_cache, channel_quota: service-role only (no user policies — RLS blocks anon)
 -- (Service role bypasses RLS by default — leaving no policies here is intentional.)
-
--- channel_quota: owner-only read (Phase 5)
-create policy channel_quota_owner_select on public.channel_quota
-    for select using (
-        exists (select 1 from public.channels c where c.id = channel_quota.channel_id and c.user_id = auth.uid())
-    );
 
 -- ─── Realtime publication ────────────────────────────────────────────────
 

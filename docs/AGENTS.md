@@ -66,26 +66,24 @@ No preamble. No markdown. No explanation.
 | Field | Value |
 |---|---|
 | Folder | `agents/research/` |
-| Model | Groq LLaMA 3.1 70B Versatile |
-| Tools | Firecrawl (`scrape_url`), Exa (`search`) |
+| Model | Groq `llama-3.3-70b-versatile` (default; override via `GROQ_MODEL`) |
+| Tools | **Tavily** (`search_web` — primary), Firecrawl (`deep_scrape` — when we need the full page markdown), Exa (`semantic_search` — niche / intent discovery) |
 | Input | `{source_url: str, video_title: str, video_description: str}` |
 | Output | `{niche: str, keywords: list[str], trending_angles: list[str], raw_context: str}` |
 
 ### Tool call patterns
 
 ```python
-# Firecrawl
-firecrawl.scrape_url(
-    source_url,
-    params={"pageOptions": {"onlyMainContent": True}},
-)
+from agents.lib.search import search_web, deep_scrape, semantic_search
 
-# Exa — semantic query informed by the scrape
-exa.search(
-    query=f"{video_title} {niche_keyword}",
-    num_results=5,
-    use_autoprompt=True,
-)
+# 1. Tavily — primary surface. Auto-fails over to TAVILY_API_KEY_FALLBACK.
+results = await search_web(f"{video_title} {niche}", max_results=5)
+
+# 2. Firecrawl — deep scrape when we need the full markdown of one URL.
+page = await deep_scrape(source_url)
+
+# 3. Exa — semantic similarity for niche + trend angles.
+angles = await semantic_search(f"{niche} trending topics", num_results=5)
 ```
 
 ### Caching
@@ -99,7 +97,7 @@ Scrape responses are cached in Supabase `firecrawl_cache` keyed by `sha256(url)`
 | Field | Value |
 |---|---|
 | Folder | `agents/metadata/` |
-| Model | Groq LLaMA 3.1 70B Versatile |
+| Model | Groq `llama-3.3-70b-versatile` |
 | Tools | none |
 | Input | Research output + `{video_title, duration_secs}` |
 | Output | `{title: str, description: str, tags: list[str], hashtags: list[str], category_id: int, publish_at: str}` |
@@ -144,7 +142,7 @@ result = await asyncio.create_subprocess_exec(
 stdout, _ = await result.communicate()
 videos = [json.loads(line) for line in stdout.decode().strip().split("\n")]
 
-# Download — streamed to /tmp/kidroo/{job_id}/{video_id}.mp4
+# Download — streamed to /tmp/{job_id}/{video_id}.mp4
 proc = await asyncio.create_subprocess_exec(
     "yt-dlp",
     "--output", f"/tmp/kidroo/{job_id}/{video_id}.%(ext)s",
@@ -187,7 +185,11 @@ resp = composio.actions.execute(
         "tags": metadata["tags"],
         "categoryId": str(metadata["category_id"]),
         "privacyStatus": "private",
-        "videoFilePath": file_path,   # local path
+        "videoFilePath": {
+            "name": os.path.basename(file_path),
+            "mimetype": "video/mp4",
+            "s3key": upload_to_composio_r2(file_path),
+        },
     },
 )
 yt_video_id = resp["data"]["id"]
