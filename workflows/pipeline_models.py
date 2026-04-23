@@ -81,10 +81,11 @@ def _persist_metadata_payload(meta: dict[str, Any]) -> dict[str, Any]:
 
 
 def _finalize_video_payload(
-    yt_video_id: str, publish_at: datetime
+    yt_video_id: str, publish_at: datetime, idempotency_key: str | None = None
 ) -> dict[str, Any]:
     return {
         "yt_video_id": yt_video_id,
         "publish_at": publish_at.isoformat(),
+        "idempotency_key": idempotency_key,
         "status": "scheduled",
     }

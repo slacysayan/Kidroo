@@ -123,6 +123,12 @@ async def download(
                 yield {"progress": pct}
         elif line.startswith("[Merger]") or line.startswith("[ffmpeg]"):
             yield {"stage": "merging"}
+            if "Merging formats into" in line:
+                # Capture the final merged filename between double quotes
+                try:
+                    final_path = Path(line.split('"', 2)[1])
+                except IndexError:
+                    pass
         elif line.startswith("[download] Destination:"):
             final_path = Path(line.split("Destination:", 1)[1].strip())
         elif "has already been downloaded" in line:

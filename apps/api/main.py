@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -179,13 +179,51 @@ async def get_job(
     return await asyncio.to_thread(_q)
 
 
-@app.post("/jobs/{job_id}/scan")
-async def scan_job(
-    job_id: str, user: dict[str, Any] = Depends(current_user)
-) -> dict[str, Any]:
-    """Run yt-dlp scan on the job's source_url and persist detected videos."""
+async def _run_scan_and_persist(job_id: str, source_url: str) -> None:
+    """Background task to run yt-dlp scan and persist videos."""
+    try:
+        videos = await ytdlp_scan(source_url)
 
-    def _load() -> dict[str, Any]:
+        def _persist() -> None:
+            supa = get_service_client()
+            rows = [
+                {
+                    "job_id": job_id,
+                    "source_video_id": v.source_video_id,
+                    "source_url": v.url or source_url,
+                    "title": v.title,
+                    "duration_secs": v.duration_secs,
+                    "status": "queued",
+                }
+                for v in videos
+            ]
+            if rows:
+                supa.table("videos").insert(rows).execute()
+            supa.table("jobs").update({"status": "awaiting_selection"}).eq(
+                "id", job_id
+            ).execute()
+
+        await asyncio.to_thread(_persist)
+    except Exception as e:
+        _log.error("scan_job.background_failed", job_id=job_id, error=str(e))
+
+        def _fail() -> None:
+            get_service_client().table("jobs").update({"status": "failed"}).eq(
+                "id", job_id
+            ).execute()
+
+        await asyncio.to_thread(_fail)
+
+
+@app.post("/jobs/{job_id}/scan", status_code=status.HTTP_202_ACCEPTED)
+async def scan_job(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    user: dict[str, Any] = Depends(current_user),
+) -> dict[str, Any]:
+    """Enqueue a yt-dlp scan for the job's source_url."""
+
+    def _load_and_mark() -> dict[str, Any]:
         supa = get_service_client()
         resp = (
             supa.table("jobs")
@@ -197,33 +235,16 @@ async def scan_job(
         )
         if not resp.data:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
-        return resp.data[0]
+        job = resp.data[0]
+        # Mark as scanning immediately
+        supa.table("jobs").update({"status": "scanning"}).eq("id", job_id).execute()
+        return job
 
-    job = await asyncio.to_thread(_load)
+    job = await asyncio.to_thread(_load_and_mark)
 
-    videos = await ytdlp_scan(job["source_url"])
+    background_tasks.add_task(_run_scan_and_persist, job_id, job["source_url"])
 
-    def _persist() -> None:
-        supa = get_service_client()
-        rows = [
-            {
-                "job_id": job_id,
-                "source_video_id": v.source_video_id,
-                "source_url": v.url or job["source_url"],
-                "title": v.title,
-                "duration_secs": v.duration_secs,
-                "status": "queued",
-            }
-            for v in videos
-        ]
-        if rows:
-            supa.table("videos").insert(rows).execute()
-        supa.table("jobs").update({"status": "awaiting_selection"}).eq(
-            "id", job_id
-        ).execute()
-
-    await asyncio.to_thread(_persist)
-    return {"job_id": job_id, "detected": len(videos)}
+    return {"job_id": job_id, "status": "scanning"}
 
 
 class StartJobRequest(BaseModel):

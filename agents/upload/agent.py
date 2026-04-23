@@ -117,25 +117,10 @@ async def _idempotent_lookup(idempotency_key: str) -> str | None:
 
 
 async def _decrement_quota(channel_id: str) -> None:
+    """Increment the channel's upload count for today (atomic RPC)."""
+
     def _q() -> None:
         supa = get_service_client()
-        # Use an RPC or raw SQL for the atomic increment; here we do a
-        # read-modify-write that's safe enough for free-tier volumes (<=6/day).
-        row = (
-            supa.table("channel_quota")
-            .select("uploads_today, daily_limit")
-            .eq("channel_id", channel_id)
-            .limit(1)
-            .execute()
-        )
-        if not row.data:
-            supa.table("channel_quota").insert(
-                {"channel_id": channel_id, "uploads_today": 1}
-            ).execute()
-            return
-        current = row.data[0].get("uploads_today", 0) or 0
-        supa.table("channel_quota").update(
-            {"uploads_today": current + 1}
-        ).eq("channel_id", channel_id).execute()
+        supa.rpc("increment_channel_quota", {"target_channel_id": channel_id}).execute()
 
     await asyncio.to_thread(_q)
