@@ -22,7 +22,7 @@ Read this before touching anything that involves credentials, user data, or thir
 
 ## Auth allowlist
 
-Kidroo is a private internal tool. Supabase magic-link sign-up must be restricted to an email allowlist:
+Kidroo is a private internal tool. Supabase Auth (email+password / magic link / OAuth) sign-up must be restricted to an email allowlist:
 
 1. `auth.users.email` is validated against the `public.allowed_emails` table by a `before_signup` Edge Function.
 2. Belt-and-braces: a `select` RLS policy on every user-facing table also verifies the email is allowlisted.
@@ -63,7 +63,7 @@ If you add a feature that expands the attack surface (e.g. auto-upload triggers,
 ## /tmp and staging files
 
 - Downloaded videos are staged under `/tmp/kidroo/<job_id>/<video_id>.mp4`.
-- Koyeb containers are ephemeral — `/tmp` evaporates on restart. That is fine because Hatchet resumes from the last checkpoint (re-downloads if necessary).
+- Railway containers (and any other PaaS we deploy on) are ephemeral — `/tmp` evaporates on restart. That is fine because Hatchet resumes from the last checkpoint (re-downloads if necessary).
 - **Always** delete the staged file on upload success, on upload failure, and on job cancellation.
 - `/tmp/kidroo/` is purged on worker boot.
 

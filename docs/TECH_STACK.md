@@ -58,7 +58,7 @@ Pinned versions live in `pyproject.toml` (Python) and `package.json` (JS). This 
 |---|---|---|
 | Trigger.dev | Hatchet | Trigger.dev has no Python SDK. |
 | LangChain | CrewAI native LLM config | Redundant abstraction layer over CrewAI. |
-| Railway | Koyeb free | Railway's free tier was discontinued. |
+| Dedicated VM / Fly.io pin | Railway + pluggable `Procfile` | Railway Hobby covers API + worker on one account's trial credit. The `Procfile` + env-var surface is provider-agnostic — swapping to Fly.io, Render, or a different Railway account is a config-only change. |
 | FastAPI WebSocket streaming | Supabase Realtime only | Two realtime channels were redundant. |
 | ESLint + Prettier | Biome | Single tool, 100× faster. |
 | Jest | Vitest | Native ESM, same API, faster. |

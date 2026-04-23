@@ -1,0 +1,21 @@
+# Nixpacks build plan for Railway (and any other Nixpacks-compatible PaaS).
+# The same recipe builds both the API and the Hatchet worker; the two services
+# differ only in their start command (see Procfile).
+#
+# Railway picks up the start command from the Procfile; to select the worker
+# service, set the service's "Custom Start Command" in the Railway UI to
+#   uv run python -m workflows.worker
+# or use `railway up --service worker`.
+
+[phases.setup]
+nixPkgs = ["python312", "ffmpeg"]
+
+[phases.install]
+cmds = [
+  "python -m pip install --upgrade pip uv",
+  "uv sync --frozen || uv sync",
+]
+
+[start]
+# Default to the API; override on the worker service in the Railway dashboard.
+cmd = "uv run uvicorn apps.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"

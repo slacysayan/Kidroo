@@ -8,9 +8,9 @@ Implementations land in Phase 2 of the roadmap.
 """
 
 __all__ = [
+    "DownloadAgent",
+    "MetadataAgent",
     "OrchestratorAgent",
     "ResearchAgent",
-    "MetadataAgent",
-    "DownloadAgent",
     "UploadAgent",
 ]
