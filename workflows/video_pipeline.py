@@ -143,7 +143,11 @@ async def upload_task(inp: ProcessVideoInput, ctx: Context) -> dict[str, Any]:
     await asyncio.to_thread(
         lambda: get_service_client()
         .table("videos")
-        .update(_finalize_video_payload(out.yt_video_id, inp.publish_at))
+        .update(
+            _finalize_video_payload(
+                out.yt_video_id, inp.publish_at, out.idempotency_key
+            )
+        )
         .eq("id", inp.video_id)
         .execute()
     )

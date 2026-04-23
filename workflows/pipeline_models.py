@@ -81,10 +81,21 @@ def _persist_metadata_payload(meta: dict[str, Any]) -> dict[str, Any]:
 
 
 def _finalize_video_payload(
-    yt_video_id: str, publish_at: datetime
+    yt_video_id: str,
+    publish_at: datetime,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    """Map a successful upload to the `videos` update payload.
+
+    The idempotency_key must be persisted here — `UploadAgent` looks it up on
+    retry to short-circuit duplicate uploads, and a missing column leaves the
+    guard dead (every retry re-uploads to YouTube and burns the daily quota).
+    """
+    payload: dict[str, Any] = {
         "yt_video_id": yt_video_id,
         "publish_at": publish_at.isoformat(),
         "status": "scheduled",
     }
+    if idempotency_key:
+        payload["idempotency_key"] = idempotency_key
+    return payload
