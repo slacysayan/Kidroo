@@ -14,7 +14,15 @@
     "rules": {
       "recommended": true,
       "correctness": { "useExhaustiveDependencies": "warn" },
-      "suspicious": { "noExplicitAny": "warn" }
+      "suspicious": { "noExplicitAny": "warn" },
+      "a11y": {
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": {
+            "inputComponents": ["Input", "Textarea", "Select", "Checkbox"]
+          }
+        }
+      }
     }
   },
   "javascript": {

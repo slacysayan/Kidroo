@@ -1,0 +1,18 @@
+/**
+ * Agent color tokens — referenced from components via Tailwind arbitrary values
+ * (e.g. `bg-[--kidroo-agent-research-bg]`) so the palette stays in one place.
+ * See docs/UI_SPEC.md "Agent color tokens".
+ */
+
+:root {
+  --kidroo-agent-orchestrator-bg: rgb(139 92 246 / 0.15);
+  --kidroo-agent-orchestrator-fg: rgb(196 181 253);
+  --kidroo-agent-research-bg: rgb(14 165 233 / 0.15);
+  --kidroo-agent-research-fg: rgb(125 211 252);
+  --kidroo-agent-metadata-bg: rgb(245 158 11 / 0.15);
+  --kidroo-agent-metadata-fg: rgb(252 211 77);
+  --kidroo-agent-download-bg: rgb(20 184 166 / 0.15);
+  --kidroo-agent-download-fg: rgb(94 234 212);
+  --kidroo-agent-upload-bg: rgb(244 63 94 / 0.15);
+  --kidroo-agent-upload-fg: rgb(253 164 175);
+}
