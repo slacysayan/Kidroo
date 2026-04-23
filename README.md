@@ -1,6 +1,6 @@
 # Kidroo
 
-> Agentic YouTube content pipeline — paste a link, agents handle the rest.
+> Agentic YouTube content pipeline — paste a link, agents handle the rest.ok
 
 Kidroo is a chat-first, agent-native web app that turns a pasted YouTube URL (channel, playlist, or single video) into a fully scheduled upload on one or more of your owned YouTube channels. Five specialized AI agents collaborate in real time — scanning the source, researching context, generating SEO metadata, downloading the asset, and uploading via Composio's OAuth bridge — with every reasoning step, tool call, and status change streaming live into the UI.
 
