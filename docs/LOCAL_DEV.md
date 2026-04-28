@@ -47,7 +47,15 @@ Next.js only exposes variables prefixed with `NEXT_PUBLIC_` to the browser. Neve
 ./scripts/dev.sh            # boots api + worker + web
 ./scripts/dev.sh api web    # subset (no worker)
 ./scripts/dev.sh stop       # kill everything
-tail -f .logs/{api,worker,web}.log
+```
+
+Tail logs (the worker only writes a log file when `HATCHET_CLIENT_TOKEN` is set, so glob your existing files instead of hard-coding the worker name):
+
+```bash
+tail -f .logs/api.log .logs/web.log                  # always present
+tail -f .logs/worker.log                             # only when worker booted
+# or, glob whichever logs exist:
+tail -f .logs/*.log
 ```
 
 Verify:

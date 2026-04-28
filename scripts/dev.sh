@@ -93,7 +93,8 @@ _stop_all() {
   # Nuke any orphaned next/uvicorn/worker processes too.
   pkill -f 'workflows.worker' 2>/dev/null || true
   pkill -f 'uvicorn apps.api.main' 2>/dev/null || true
-  pkill -f 'next dev --turbopack' 2>/dev/null || true
+  pkill -f 'next dev' 2>/dev/null || true
+  pkill -f 'next-server' 2>/dev/null || true
   if [[ $stopped -eq 0 ]]; then
     echo "nothing was running"
   fi

@@ -413,12 +413,12 @@ supabase db push                     # or: psql $SUPABASE_DB_URL -f supabase/mig
 # 4. Connect your first YouTube channel
 composio connections create --toolkit YOUTUBE --user-id finance_daily
 
-# 5. Run backend + frontend
-pnpm dev                             # runs apps/web via Turborepo
-uv run fastapi dev apps/api/main.py  # runs apps/api
+# 5. Run the local stack (api :8000, worker, web :3000)
+./scripts/dev.sh
+# (subset: ./scripts/dev.sh api web   — skips the Hatchet worker)
+# (stop:   ./scripts/dev.sh stop)
 
-# 6. Run a Hatchet worker in another terminal
-uv run python -m workflows.worker
+# See docs/LOCAL_DEV.md for migrations, env splits, and worker-token behaviour.
 ```
 
 ## Deploying

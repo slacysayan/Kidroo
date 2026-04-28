@@ -23,7 +23,8 @@ def get_hatchet() -> Hatchet:
     """
     settings = get_settings()
     os.environ.setdefault(
-        "HATCHET_CLIENT_TOKEN", settings.hatchet_client_token.get_secret_value()
+        "HATCHET_CLIENT_TOKEN",
+        settings.require_hatchet_client_token().get_secret_value(),
     )
     os.environ.setdefault(
         "HATCHET_CLIENT_HOST_PORT", settings.hatchet_client_host_port

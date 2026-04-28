@@ -58,11 +58,18 @@ class Settings(BaseSettings):
     supabase_db_url: SecretStr
 
     # ─── Hatchet ───────────────────────────────────────────────────────────
-    hatchet_client_token: SecretStr
+    # Optional at config-parse time so `./scripts/dev.sh` can boot the API
+    # and web without provisioning Hatchet first. Code that actually starts
+    # or dispatches workflow runs must call `require_hatchet_client_token()`
+    # to fail fast when the token is missing.
+    hatchet_client_token: SecretStr | None = None
     hatchet_client_host_port: str = "engine.hatchet-tools.com:7077"
 
     # ─── App ───────────────────────────────────────────────────────────────
-    pipeline_enabled: bool = True
+    # Default OFF: the upload agent only calls Composio's YOUTUBE_UPLOAD_VIDEO
+    # when this is True. Local dev should leave this False so the rest of the
+    # DAG can run end-to-end without publishing real videos.
+    pipeline_enabled: bool = False
     max_concurrent_videos_per_user: int = 6
     download_staging_dir: Path = Path("/tmp/kidroo")
     log_level: str = "info"
@@ -82,6 +89,21 @@ class Settings(BaseSettings):
             if origin and origin not in seen:
                 seen.append(origin)
         return seen
+
+    def require_hatchet_client_token(self) -> SecretStr:
+        """Return the Hatchet client token or raise if it is missing.
+
+        Call this from code paths that actually need Hatchet (worker startup,
+        `hatchet.runs.create(...)`). Importing `agents.lib.config` for any
+        other reason must not require the token.
+        """
+        if self.hatchet_client_token is None:
+            raise ValueError(
+                "HATCHET_CLIENT_TOKEN is not set. Set it in `.env` (or the "
+                "Railway service env) before running the worker or starting "
+                "a workflow."
+            )
+        return self.hatchet_client_token
 
     @property
     def supabase_client_key(self) -> SecretStr:
