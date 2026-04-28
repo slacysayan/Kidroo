@@ -32,6 +32,10 @@ out/
 coverage/
 *.tsbuildinfo
 .pnpm-store/
+next-env.d.ts
+
+# Local dev service logs (scripts/dev.sh writes here)
+.logs/
 
 # IDE
 .vscode/
